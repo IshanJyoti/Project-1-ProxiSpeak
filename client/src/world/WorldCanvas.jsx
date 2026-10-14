@@ -1,6 +1,20 @@
 import { useEffect, useRef } from 'react';
 import { WORLD, HEAR_RADIUS } from '../../../shared/geo.js';
-import { stepSelf, initials, AVATAR_RADIUS } from './world.js';
+import { stepSelf, initials } from './world.js';
+import { avatarById } from '../../../shared/avatars.js';
+
+const AVATAR_DISPLAY_RADIUS = 22;
+const avatarImages = new Map();
+
+function getAvatarImage(avatar) {
+  if (!avatar.image) return null;
+  if (!avatarImages.has(avatar.id)) {
+    const image = new Image();
+    image.src = avatar.image;
+    avatarImages.set(avatar.id, image);
+  }
+  return avatarImages.get(avatar.id);
+}
 
 // 2D virtual office rendered on an HTML5 canvas with requestAnimationFrame (target: steady 60 FPS).
 // The floor plan (room.png) is the background; obstacles from the server are drawn only in debug mode.
@@ -149,18 +163,18 @@ function draw(ctx, dpr, world, bg, mixer, hearRadius) {
   }
 
   const people = [...world.users.values()].filter((u) => u.id !== world.selfId).map((u) => ({ ...u, self: false }));
-  people.push({ id: world.selfId, name: world.selfName ?? 'You', color: world.selfColor ?? '#e5bd83', rx: me.x, ry: me.y, self: true });
+  people.push({ id: world.selfId, name: world.selfName ?? 'You', color: world.selfColor ?? '#e5bd83', avatarId: world.selfAvatarId, rx: me.x, ry: me.y, self: true });
   people.sort((a, b) => a.ry - b.ry);
 
   for (const p of people) {
     const speaking = !p.self && mixer && mixer.levelOf(p.id) > 0.08;
     ctx.beginPath();
-    ctx.ellipse(p.rx, p.ry + 8, AVATAR_RADIUS + 3, AVATAR_RADIUS * 0.62, 0, 0, Math.PI * 2);
+    ctx.ellipse(p.rx, p.ry + 10, AVATAR_DISPLAY_RADIUS + 4, AVATAR_DISPLAY_RADIUS * 0.62, 0, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(31, 42, 53, .23)';
     ctx.fill();
     if (speaking || p.self) {
       ctx.beginPath();
-      ctx.arc(p.rx, p.ry, AVATAR_RADIUS + (speaking ? 7 : 5), 0, Math.PI * 2);
+      ctx.arc(p.rx, p.ry, AVATAR_DISPLAY_RADIUS + (speaking ? 7 : 5), 0, Math.PI * 2);
       ctx.strokeStyle = speaking ? 'rgba(26, 135, 109, .27)' : 'rgba(255, 255, 255, .82)';
       ctx.lineWidth = 2;
       ctx.stroke();
@@ -170,30 +184,60 @@ function draw(ctx, dpr, world, bg, mixer, hearRadius) {
     ctx.shadowBlur = 8;
     ctx.shadowOffsetY = 2;
     ctx.beginPath();
-    ctx.arc(p.rx, p.ry, AVATAR_RADIUS, 0, Math.PI * 2);
-    ctx.fillStyle = p.color;
+    ctx.arc(p.rx, p.ry, AVATAR_DISPLAY_RADIUS, 0, Math.PI * 2);
+    const avatar = avatarById(p.avatarId);
+    ctx.fillStyle = avatar.background ?? p.color;
     ctx.fill();
+    ctx.clip();
+    const avatarImage = getAvatarImage(avatar);
+    if (avatarImage?.complete && avatarImage.naturalWidth) {
+      const size = AVATAR_DISPLAY_RADIUS * 2;
+      const [sourceX, sourceY, sourceWidth, sourceHeight] = avatar.crop ??
+        [0, 0, avatarImage.naturalWidth, avatarImage.naturalHeight];
+      ctx.filter = 'brightness(2) saturate(1.12) contrast(1.08)';
+      ctx.drawImage(avatarImage, sourceX, sourceY, sourceWidth, sourceHeight, p.rx - size / 2, p.ry - size / 2, size, size);
+      ctx.filter = 'none';
+    } else if (avatar.emoji) {
+      ctx.shadowColor = 'transparent';
+      ctx.fillStyle = '#fff';
+      ctx.font = '25px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(avatar.emoji, p.rx, p.ry + 0.5);
+    } else if (avatar.id === 'initials') {
+      ctx.shadowColor = 'transparent';
+      ctx.fillStyle = '#fff';
+      ctx.font = '700 15px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(initials(p.name), p.rx, p.ry + 0.5);
+    } else if (!avatar.emoji) {
+      ctx.shadowColor = 'transparent';
+      ctx.fillStyle = '#fff';
+      ctx.font = '700 15px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(initials(p.name), p.rx, p.ry + 0.5);
+    }
     ctx.restore();
     ctx.lineWidth = speaking ? 2.5 : 2;
     ctx.strokeStyle = speaking ? '#16866c' : p.self ? '#ffffff' : 'rgba(255, 255, 255, .94)';
     ctx.stroke();
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '700 9px system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(initials(p.name), p.rx, p.ry + 0.5);
     ctx.font = '700 11px system-ui, sans-serif';
     const label = p.self ? `${p.name} (You)` : p.name;
-    const w = ctx.measureText(label).width + 16;
+    const labelWidth = ctx.measureText(label).width;
+    const w = labelWidth + 32;
     ctx.fillStyle = 'rgba(19, 34, 45, .86)';
-    roundedRect(ctx, p.rx - w / 2, p.ry - AVATAR_RADIUS - 21, w, 17, 6);
+    roundedRect(ctx, p.rx - w / 2, p.ry - AVATAR_DISPLAY_RADIUS - 21, w, 17, 6);
     ctx.fill();
     ctx.beginPath();
-    ctx.arc(p.rx - w / 2 + 7, p.ry - AVATAR_RADIUS - 12.5, 2, 0, Math.PI * 2);
+    ctx.arc(p.rx - w / 2 + 9, p.ry - AVATAR_DISPLAY_RADIUS - 12.5, 2, 0, Math.PI * 2);
     ctx.fillStyle = speaking ? '#61e0b5' : p.self ? '#78e1bc' : '#d6e2e0';
     ctx.fill();
     ctx.fillStyle = '#fff';
-    ctx.fillText(label, p.rx + 3, p.ry - AVATAR_RADIUS - 12.5);
+    ctx.textAlign = 'left';
+    ctx.fillText(label, p.rx - w / 2 + 21, p.ry - AVATAR_DISPLAY_RADIUS - 12.5, labelWidth);
+    ctx.textAlign = 'center';
   }
 
   if (world.target) {

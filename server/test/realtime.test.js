@@ -25,7 +25,7 @@ function makeIo() {
   return io;
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const join = (sock, id, x, y) => sock.h['room:join']({ roomId: 'main-office', participant: { id, displayName: id, color: '#aabbcc', x, y } });
+const join = (sock, id, x, y, avatarId) => sock.h['room:join']({ roomId: 'main-office', participant: { id, displayName: id, color: '#aabbcc', x, y, avatarId } });
 const move = (sock, x, y) => sock.h['avatar:move']({ roomId: 'main-office', x, y });
 const events = (io, ev) => io.log.filter((l) => l.ev === ev);
 
@@ -49,11 +49,11 @@ test('server pairs avatars that walk into earshot and drops them with hysteresis
   await a.h['rtc:signal']({ roomId: 'main-office', to: 'user-b', kind: 'offer', payload: { sdp: 'x' } });
   assert.equal(events(io, 'rtc:signal').length, 1);
 
-  move(b, 100 + 160, 300); // 160px: past HEAR but within DROP -> still connected
+  move(b, 100 + 120, 300); // 120px: past HEAR but within DROP -> still connected
   await sleep(120);
   assert.equal(events(io, 'peer:leave').length, 0);
 
-  move(b, 100 + 200, 300); // 200px: beyond DROP_RADIUS
+  move(b, 100 + 140, 300); // 140px: beyond DROP_RADIUS
   await sleep(120);
   assert.ok(events(io, 'peer:leave').some((e) => e.room === 'user:user-a'));
 
@@ -80,6 +80,30 @@ test('invalid join payloads are rejected', async () => {
   attachRealtime(io, { store: new MemoryGeoStore(), layouts: { get: async () => [] } });
   const a = io.connect();
   await a.h['room:join']({ roomId: 'main-office', participant: { id: 'x', displayName: '', color: 'red' } });
+  assert.ok(a.out.some((o) => o.ev === 'room:error'));
+});
+
+test('selected avatars are shared with room members and restored in snapshots', async () => {
+  const io = makeIo();
+  const store = new MemoryGeoStore();
+  attachRealtime(io, { store, layouts: { get: async () => [] } });
+  const a = io.connect();
+  const b = io.connect();
+
+  await join(a, 'user-a', 100, 300, 'aman');
+  assert.equal((await store.get('main-office', 'user-a')).avatarId, 'aman');
+  assert.ok(events(io, 'user:join').some((event) => event.data.id === 'user-a' && event.data.avatarId === 'aman'));
+
+  await join(b, 'user-b', 500, 300, 'fox');
+  const snapshot = b.out.find((event) => event.ev === 'world:snapshot');
+  assert.equal(snapshot.data.users.find((user) => user.id === 'user-a').avatarId, 'aman');
+});
+
+test('server rejects unknown avatar selections', async () => {
+  const io = makeIo();
+  attachRealtime(io, { store: new MemoryGeoStore(), layouts: { get: async () => [] } });
+  const a = io.connect();
+  await join(a, 'user-a', 100, 300, 'untrusted-image-url');
   assert.ok(a.out.some((o) => o.ev === 'room:error'));
 });
 

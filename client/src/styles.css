@@ -99,6 +99,14 @@ kbd { padding: 3px 5px; border: 1px solid #e4e9e5; border-radius: 4px; backgroun
 .card input { width: 100%; margin-bottom: 12px; padding: 12px 13px; border: 1px solid #e0e7e2; border-radius: 9px; outline: none; background: #fbfcfb; color: var(--ink); font-size: 13px; transition: .18s; }
 .card input:focus { border-color: #71bda0; box-shadow: 0 0 0 3px #e6f5ed; }
 .card input::placeholder { color: #b0bab5; }
+.avatar-selection { margin: 3px 0 14px; }
+.avatar-selection .name-label { margin-bottom: 8px; }
+.avatar-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; }
+.avatar-choice { min-width: 0; display: grid; justify-items: center; gap: 5px; padding: 7px 3px 6px; border-color: #e8ece8; color: #66736f; font-size: 8px; }
+.avatar-choice:hover:not(:disabled), .avatar-choice.selected { border-color: #72bea1; background: #f0faf5; color: #14785f; }
+.avatar-choice.selected { box-shadow: 0 0 0 2px #d8f0e4; }
+.avatar-preview { width: 34px; height: 34px; display: grid; place-items: center; overflow: hidden; border-radius: 50%; color: #fff; font-size: 17px; }
+.avatar-choice .avatar-art { width: 100%; height: 100%; display: grid; place-items: center; border-radius: inherit; object-fit: cover; font-size: 19px; line-height: 1; }
 .join-actions { display: grid; grid-template-columns: 1.5fr 1fr; gap: 8px; }
 button { border-radius: 9px; border: 1px solid var(--line); background: #fff; font-weight: 700; cursor: pointer; transition: .18s ease; }
 button:hover:not(:disabled) { border-color: #9bceb9; }
@@ -150,6 +158,7 @@ button.primary:hover:not(:disabled) { border-color: #0c745d; background: #0f795f
 .people { display: grid; gap: 5px; max-height: 230px; overflow: auto; margin: 0; padding: 0; list-style: none; }
 .people li { min-height: 44px; display: flex; align-items: center; gap: 10px; padding: 5px 2px; font-size: 11px; }
 .dot { width: 31px; height: 31px; display: grid; flex: 0 0 auto; place-items: center; border: 2px solid white; border-radius: 50%; color: #fff; font-size: 9px; font-weight: 700; box-shadow: 0 2px 6px rgba(32, 48, 40, .15); }
+.dot .avatar-art { width: 100%; height: 100%; display: grid; place-items: center; border-radius: inherit; object-fit: cover; font-size: 17px; line-height: 1; }
 .self-dot { outline: 2px solid #d9f1e5; }
 .person-name { min-width: 0; flex: 1; overflow: hidden; color: #3c4a46; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
 .person-name small { display: block; margin-top: 3px; color: #9aa39f; font-size: 9px; font-weight: 500; }

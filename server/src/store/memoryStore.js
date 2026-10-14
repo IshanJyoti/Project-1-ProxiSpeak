@@ -9,7 +9,7 @@ export class MemoryGeoStore {
     if (!this.rooms.has(roomId)) this.rooms.set(roomId, new Map());
     return this.rooms.get(roomId);
   }
-  async upsert(roomId, user) { this._room(roomId).set(user.id, { ...user }); }
+  async upsert(roomId, user) { this._room(roomId).set(user.id, { ...user, avatarId: user.avatarId ?? 'initials' }); }
   async moveMany(roomId, moves) {
     const room = this._room(roomId);
     for (const m of moves) { const u = room.get(m.id); if (u) { u.x = m.x; u.y = m.y; } }

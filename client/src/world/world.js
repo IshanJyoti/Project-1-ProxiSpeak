@@ -10,6 +10,7 @@ export function createWorld() {
   return {
     selfId: null,
     selfName: 'You',
+    selfAvatarId: 'initials',
     self: { x: SPAWN.x, y: SPAWN.y },
     users: new Map(),      // id -> { id, name, color, x, y, rx, ry }  (x,y = server truth, rx,ry = rendered)
     obstacles: [],

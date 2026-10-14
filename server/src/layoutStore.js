@@ -4,6 +4,8 @@ import { config } from './config.js';
 import { defaultObstacles } from '../../shared/defaultLayout.js';
 import { HEAR_RADIUS } from '../../shared/geo.js';
 
+const PREVIOUS_DEFAULT_HEAR_RADIUS = 140;
+
 // Room persistence: Mongo `layouts` collection when available, JSON file otherwise.
 export function createLayoutStore(geoStore) {
   const file = path.join(config.dataDir, 'layouts.json');
@@ -32,7 +34,12 @@ export function createLayoutStore(geoStore) {
       const settings = geoStore.getRoomSettings
         ? await geoStore.getRoomSettings(roomId)
         : await getRoomData(roomId);
-      return { hearRadius: settings?.hearRadius ?? HEAR_RADIUS };
+      const savedHearRadius = settings?.hearRadius;
+      return {
+        hearRadius: savedHearRadius === PREVIOUS_DEFAULT_HEAR_RADIUS
+          ? HEAR_RADIUS
+          : savedHearRadius ?? HEAR_RADIUS,
+      };
     },
     async saveHearRadius(roomId, hearRadius) {
       if (geoStore.saveRoomSettings) return geoStore.saveRoomSettings(roomId, { hearRadius });

@@ -21,6 +21,7 @@ test('occlusion multiplies transmit of each obstacle crossed', () => {
 });
 
 test('attenuation falls off with distance and occlusion', () => {
+  assert.equal(HEAR_RADIUS, 100);
   assert.equal(attenuation(0), 1);
   assert.equal(attenuation(HEAR_RADIUS), 0);
   assert.ok(attenuation(40) > attenuation(80));
@@ -60,7 +61,7 @@ test('diffPeers applies hysteresis', () => {
   const near = (id, distance) => ({ id, distance });
   let r = diffPeers(new Set(), [near('a', 100), near('b', 160)]);
   assert.deepEqual(r.entered, ['a']);            // b is outside HEAR_RADIUS, not entered
-  r = diffPeers(new Set(['a', 'b']), [near('a', 160), near('b', 175)]);
+  r = diffPeers(new Set(['a', 'b']), [near('a', 120), near('b', 135)]);
   assert.deepEqual(r.left, ['b']);               // a kept (<= DROP_RADIUS), b dropped
   assert.deepEqual([...r.next], ['a']);
 });

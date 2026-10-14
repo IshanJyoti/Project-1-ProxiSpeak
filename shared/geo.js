@@ -1,6 +1,6 @@
 // Shared by server and client so both sides agree on distance, occlusion and gain.
 export const WORLD = { width: 1000, height: 540 };
-export const HEAR_RADIUS = 140; // within this distance a peer is audible / handshake allowed
+export const HEAR_RADIUS = 100; // within this distance a peer is audible / handshake allowed
 export const HEAR_RADIUS_MIN = 50;
 export const HEAR_RADIUS_MAX = 500;
 export const HEAR_RADIUS_STEP = 10;

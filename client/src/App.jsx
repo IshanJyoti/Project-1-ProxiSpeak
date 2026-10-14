@@ -1,22 +1,91 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
 import WorldCanvas from './world/WorldCanvas.jsx';
-import { createWorld, colorFor, initials } from './world/world.js';
+import { createWorld, colorFor } from './world/world.js';
 import { SpatialMixer } from './audio/SpatialMixer.js';
 import { PeerManager } from './rtc/PeerManager.js';
 import { SPAWN } from '../../shared/defaultLayout.js';
-import { HEAR_RADIUS, HEAR_HYSTERESIS, HEAR_RADIUS_MIN, HEAR_RADIUS_MAX, HEAR_RADIUS_STEP, dist } from '../../shared/geo.js';
+import { WORLD, HEAR_RADIUS, HEAR_HYSTERESIS, HEAR_RADIUS_MIN, HEAR_RADIUS_MAX, HEAR_RADIUS_STEP, dist } from '../../shared/geo.js';
+import { AVATAR_CHOICES, AVATAR_IDS, DEFAULT_AVATAR_ID, avatarById } from '../../shared/avatars.js';
 
 const ROOM_ID = 'main-office';
+const ACTIVE_SESSION_KEY = 'proxispeak-active-session';
+const AVATAR_PREFERENCE_KEY = 'proxispeak-avatar-id';
+
+async function microphoneErrorMessage(error) {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    return 'This page cannot access a microphone. Open the direct HTTPS website (not an embedded preview) in Edge.';
+  }
+  if (!window.isSecureContext) {
+    return 'The browser only allows microphone access on HTTPS or localhost. Open the secure HTTPS link directly in Edge.';
+  }
+  const policy = document.permissionsPolicy ?? document.featurePolicy;
+  if (policy?.allowsFeature && !policy.allowsFeature('microphone')) {
+    return 'The website host is blocking microphone access with its Permissions-Policy. The site owner must allow microphone for this page.';
+  }
+  let permissionState;
+  try {
+    permissionState = (await navigator.permissions?.query({ name: 'microphone' }))?.state;
+  } catch {
+    permissionState = undefined;
+  }
+  switch (error?.name) {
+    case 'NotAllowedError':
+    case 'PermissionDeniedError':
+      if (permissionState === 'granted') {
+        return 'Edge reports microphone permission as allowed, but Windows or the website host blocked capture. Check Windows microphone privacy, close apps using the mic, and open the HTTPS link directly in Edge (not an embedded preview).';
+      }
+      return 'Edge blocked microphone access. Allow Microphone in the site permissions beside the address bar, then click Enable microphone in Quick controls.';
+    case 'NotFoundError':
+    case 'DevicesNotFoundError':
+      return 'No microphone was found. Connect or enable a microphone, then click Enable microphone in Quick controls.';
+    case 'NotReadableError':
+    case 'TrackStartError':
+      return 'The microphone is busy or unavailable to Windows. Close apps using it and check Windows microphone privacy settings, then retry.';
+    case 'OverconstrainedError':
+      return 'The selected microphone does not support the requested audio settings. Choose another microphone in Edge settings and retry.';
+    case 'SecurityError':
+      return 'The browser blocked microphone access for this page. Open it over HTTPS and allow Microphone in Edge site permissions.';
+    case 'AbortError':
+      return 'The browser could not start the microphone. Check that it is connected and retry.';
+    default:
+      return `The browser could not start the microphone${error?.message ? `: ${error.message}` : '.'}`;
+  }
+}
+
+function readSavedSession() {
+  const saved = sessionStorage.getItem(ACTIVE_SESSION_KEY);
+  if (!saved) return null;
+  try {
+    const session = JSON.parse(saved);
+    if (typeof session.displayName !== 'string' || !session.displayName.trim()) return null;
+    const { x, y } = session;
+    return {
+      displayName: session.displayName,
+      avatarId: AVATAR_IDS.has(session.avatarId) ? session.avatarId : DEFAULT_AVATAR_ID,
+      position: Number.isFinite(x) && Number.isFinite(y) &&
+        x >= 0 && x <= WORLD.width && y >= 0 && y <= WORLD.height
+        ? { x, y }
+        : { ...SPAWN },
+    };
+  } catch {
+    return null;
+  }
+}
 
 export default function App() {
   const world = useMemo(createWorld, []);
   const sessionRef = useRef(null);
   const sessionChannelRef = useRef(null);
+  const restoreStartedRef = useRef(false);
   const tabIdRef = useRef(sessionStorage.getItem('proxispeak-tab-id') || `tab-${Math.random().toString(36).slice(2, 12)}`);
   const frameCount = useRef(0);
   const hearRadiusRef = useRef(HEAR_RADIUS);
   const [name, setName] = useState('');
+  const [selectedAvatarId, setSelectedAvatarId] = useState(() => {
+    const saved = localStorage.getItem(AVATAR_PREFERENCE_KEY);
+    return AVATAR_IDS.has(saved) ? saved : DEFAULT_AVATAR_ID;
+  });
   const [joined, setJoined] = useState(false);
   const [network, setNetwork] = useState('offline');
   const [error, setError] = useState('');
@@ -55,12 +124,12 @@ export default function App() {
   }, []);
 
   const refreshRoster = useCallback(() => {
-    setRoster([...world.users.values()].map(({ id, name, color }) => ({ id, name, color })));
+    setRoster([...world.users.values()].map(({ id, name, color, avatarId }) => ({ id, name, color, avatarId })));
   }, [world]);
 
   const addUser = useCallback((u) => {
     const prev = world.users.get(u.id);
-    world.users.set(u.id, { id: u.id, name: u.name, color: u.color, x: u.x, y: u.y, rx: prev?.rx ?? u.x, ry: prev?.ry ?? u.y });
+    world.users.set(u.id, { id: u.id, name: u.name, color: u.color, avatarId: u.avatarId ?? DEFAULT_AVATAR_ID, x: u.x, y: u.y, rx: prev?.rx ?? u.x, ry: prev?.ry ?? u.y });
   }, [world]);
 
   const teardown = useCallback(() => {
@@ -79,6 +148,20 @@ export default function App() {
   }, [world]);
 
   useEffect(() => teardown, [teardown]);
+
+  useEffect(() => {
+    const savePosition = () => {
+      if (!sessionRef.current) return;
+      sessionStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify({
+        displayName: world.selfName,
+        avatarId: world.selfAvatarId,
+        x: world.self.x,
+        y: world.self.y,
+      }));
+    };
+    window.addEventListener('pagehide', savePosition);
+    return () => window.removeEventListener('pagehide', savePosition);
+  }, [world]);
 
   useEffect(() => {
     if (typeof BroadcastChannel === 'undefined') return undefined;
@@ -100,16 +183,17 @@ export default function App() {
     };
   }, [teardown, world]);
 
-  const join = async (withMic) => {
+  const join = async (withMic, savedSession = null) => {
     setError('');
-    const displayName = name.trim();
+    const displayName = (savedSession?.displayName ?? name).trim();
+    const avatarId = savedSession?.avatarId ?? selectedAvatarId;
     if (!displayName) return setError('Please enter your name first.');
     let stream;
     if (withMic) {
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false });
-      } catch {
-        return setError('Microphone unavailable or blocked. You can still join in listen-only mode.');
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (micError) {
+        setError(`${await microphoneErrorMessage(micError)} You can join now in listen-only mode and enable your microphone later.`);
       }
     }
     let selfId = localStorage.getItem('proxispeak-id');
@@ -120,8 +204,9 @@ export default function App() {
     sessionChannelRef.current?.postMessage({ type: 'takeover', id: selfId, tabId: tabIdRef.current });
     world.selfId = selfId;
     world.selfName = displayName;
+    world.selfAvatarId = avatarId;
     world.selfColor = colorFor(selfId);
-    world.self = { ...SPAWN };
+    world.self = savedSession ? { ...savedSession.position } : { ...SPAWN };
 
     const m = new SpatialMixer();
     await m.resume();
@@ -133,13 +218,19 @@ export default function App() {
     sessionRef.current = { socket, peers, mixer: m, stream, heartbeat };
     setMixer(m);
     setHasMic(Boolean(stream));
-    setMicOn(true);
+    setMicOn(Boolean(stream));
     setNetwork('connecting');
     setJoined(true);
+    sessionStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify({
+      displayName,
+      avatarId,
+      x: world.self.x,
+      y: world.self.y,
+    }));
 
     socket.on('connect', () => {
       setNetwork('connected');
-      socket.emit('room:join', { roomId: ROOM_ID, participant: { id: selfId, displayName, color: world.selfColor, x: world.self.x, y: world.self.y } });
+      socket.emit('room:join', { roomId: ROOM_ID, participant: { id: selfId, displayName, avatarId, color: world.selfColor, x: world.self.x, y: world.self.y } });
     });
     socket.on('disconnect', () => setNetwork('reconnecting'));
     socket.on('connect_error', () => setNetwork('reconnecting'));
@@ -172,9 +263,20 @@ export default function App() {
     socket.on('rtc:signal', (msg) => peers.handleSignal(msg));
   };
 
+  useEffect(() => {
+    if (restoreStartedRef.current) return;
+    const savedSession = readSavedSession();
+    if (!savedSession) return;
+    restoreStartedRef.current = true;
+    setName(savedSession.displayName);
+    setSelectedAvatarId(savedSession.avatarId);
+    void join(false, savedSession);
+  }, []);
+
   const leave = () => {
     sessionRef.current?.socket.emit('room:leave');
     teardown();
+    sessionStorage.removeItem(ACTIVE_SESSION_KEY);
     setJoined(false);
     setNetwork('offline');
     setRoster([]);
@@ -183,8 +285,16 @@ export default function App() {
   };
 
   const onMove = useCallback((x, y) => {
-    sessionRef.current?.socket.emit('avatar:move', { roomId: ROOM_ID, x, y });
-  }, []);
+    const session = sessionRef.current;
+    if (!session) return;
+    session.socket.emit('avatar:move', { roomId: ROOM_ID, x, y });
+    sessionStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify({
+      displayName: world.selfName,
+      avatarId: world.selfAvatarId,
+      x,
+      y,
+    }));
+  }, [world]);
 
   // runs every animation frame: audio mixing every frame, peer pruning + HUD ~6x/second
   const onFrame = useCallback(() => {
@@ -205,6 +315,26 @@ export default function App() {
     const next = !micOn;
     stream.getAudioTracks().forEach((t) => { t.enabled = next; });
     setMicOn(next);
+  };
+  const enableMic = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const session = sessionRef.current;
+      if (!session) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      session.stream = stream;
+      const peerIds = session.peers.ids();
+      session.peers.closeAll();
+      session.peers.stream = stream;
+      setHasMic(true);
+      setMicOn(true);
+      setError('');
+      for (const id of peerIds) session.peers.enter(id);
+    } catch (micError) {
+      setError(await microphoneErrorMessage(micError));
+    }
   };
   const toggleDeafen = () => { const next = !deafened; setDeafened(next); sessionRef.current?.mixer.setMuted(next); };
   const changeVolume = (v) => { setVolume(v); sessionRef.current?.mixer.setVolume(v / 100); };
@@ -244,8 +374,8 @@ export default function App() {
   };
 
   const statusText = { offline: 'Not in the office', connecting: 'Connecting…', connected: 'Live', reconnecting: 'Reconnecting…' }[network];
-  const micControlText = !joined ? 'Microphone' : hasMic ? (micOn ? 'Microphone' : 'Microphone muted') : 'Listen-only mode';
-  const micControlState = !joined ? 'READY' : hasMic ? (micOn ? 'ON' : 'OFF') : 'N/A';
+  const micControlText = !joined ? 'Microphone' : hasMic ? (micOn ? 'Microphone' : 'Microphone muted') : 'Enable microphone';
+  const micControlState = !joined ? 'READY' : hasMic ? (micOn ? 'ON' : 'OFF') : 'OFF';
   const roomControlState = !joined ? 'READY' : deafened ? 'OFF' : 'ON';
 
   return (
@@ -282,6 +412,29 @@ export default function App() {
                   <p>Step into the office. Move closer to teammates to hear them naturally.</p>
                   <label className="name-label" htmlFor="display-name">YOUR NAME</label>
                   <input id="display-name" value={name} maxLength={32} placeholder="e.g. Alex Morgan" onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && join(true)} />
+                  <div className="avatar-selection">
+                    <span className="name-label">CHOOSE YOUR AVATAR</span>
+                    <div className="avatar-grid" role="group" aria-label="Choose your avatar">
+                      {AVATAR_CHOICES.map((avatar) => (
+                        <button
+                          className={`avatar-choice${selectedAvatarId === avatar.id ? ' selected' : ''}`}
+                          key={avatar.id}
+                          type="button"
+                          aria-label={`${avatar.label} avatar`}
+                          aria-pressed={selectedAvatarId === avatar.id}
+                          onClick={() => {
+                            setSelectedAvatarId(avatar.id);
+                            localStorage.setItem(AVATAR_PREFERENCE_KEY, avatar.id);
+                          }}
+                        >
+                          <span className="avatar-preview" style={{ background: avatar.background }}>
+                            <AvatarPreview avatarId={avatar.id} />
+                          </span>
+                          <span>{avatar.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <div className="join-actions">
                     <button className="primary" onClick={() => join(true)}><span aria-hidden="true">◉</span> Join with microphone</button>
                     <button className="listen-button" onClick={() => join(false)}>Listen only</button>
@@ -299,7 +452,7 @@ export default function App() {
           <section className="panel">
             <div className="panel-heading"><div><span className="eyebrow">AUDIO</span><h3>Quick controls</h3></div><span className={`audio-state${joined ? ' active' : ''}`}><i />{joined ? 'ACTIVE' : 'IDLE'}</span></div>
             <div className="control-stack">
-              <button className={`control-button${!micOn && joined && hasMic ? ' selected' : ''}`} onClick={toggleMic} disabled={!joined || !hasMic} aria-pressed={joined && hasMic && !micOn}>
+              <button className={`control-button${!micOn && joined && hasMic ? ' selected' : ''}`} onClick={hasMic ? toggleMic : enableMic} disabled={!joined} aria-pressed={joined && hasMic && !micOn}>
                 <span className="control-icon" aria-hidden="true">{micOn ? '♩' : '♬'}</span><span>{micControlText}</span><b>{micControlState}</b>
               </button>
               <button className={`control-button${deafened ? ' selected' : ''}`} onClick={toggleDeafen} disabled={!joined} aria-pressed={deafened}>
@@ -333,8 +486,8 @@ export default function App() {
           <section className="panel">
             <div className="panel-heading"><div><span className="eyebrow">TEAM</span><h3>In the office</h3></div><span className="count-badge">{joined ? roster.length + 1 : 0}</span></div>
             <ul className="people">
-              {joined && <li><span className="dot self-dot" style={{ background: world.selfColor }}>{initials(name)}</span><span className="person-name">{name}<small>You</small></span><span className="online-dot" /></li>}
-              {roster.map((p) => <li key={p.id}><span className="dot" style={{ background: p.color }}>{initials(p.name)}</span><span className="person-name">{p.name}<small>In the office</small></span><span className="online-dot" /></li>)}
+              {joined && <li><span className="dot self-dot" style={{ background: world.selfColor }}><AvatarPreview avatarId={world.selfAvatarId} /></span><span className="person-name">{name}<small>You</small></span><span className="online-dot" /></li>}
+              {roster.map((p) => <li key={p.id}><span className="dot" style={{ background: p.color }}><AvatarPreview avatarId={p.avatarId} /></span><span className="person-name">{p.name}<small>In the office</small></span><span className="online-dot" /></li>)}
               {!joined && <li className="empty-roster">Join the room to meet your team.</li>}
               {joined && roster.length === 0 && <li className="empty-roster">You’re the first one here. Invite your team!</li>}
             </ul>
@@ -343,4 +496,11 @@ export default function App() {
       </main>
     </div>
   );
+}
+
+function AvatarPreview({ avatarId }) {
+  const avatar = avatarById(avatarId);
+  if (avatar.image) return <img className="avatar-art" src={avatar.image} alt="" />;
+  if (avatar.emoji) return <span className="avatar-art">{avatar.emoji}</span>;
+  return <span className="avatar-art">Aa</span>;
 }

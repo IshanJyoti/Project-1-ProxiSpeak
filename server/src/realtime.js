@@ -1,6 +1,7 @@
 import { config } from './config.js';
 import { WORLD, HEAR_RADIUS, HEAR_HYSTERESIS, dist, validHearRadius } from '../../shared/geo.js';
 import { SPAWN } from '../../shared/defaultLayout.js';
+import { AVATAR_IDS, DEFAULT_AVATAR_ID } from '../../shared/avatars.js';
 import { diffPeers, Metrics } from './proximity.js';
 
 const ROOM_RE = /^[a-z0-9-]{1,48}$/i;
@@ -109,8 +110,9 @@ export function attachRealtime(io, { store, layouts }) {
     socket.on('room:join', async (payload) => {
       try {
         const p = payload?.participant;
+        const avatarId = p?.avatarId ?? DEFAULT_AVATAR_ID;
         if (!ROOM_RE.test(payload?.roomId ?? '') || !p || !ID_RE.test(p.id) || typeof p.displayName !== 'string' ||
-            !p.displayName.trim() || p.displayName.trim().length > 32 || !COLOR_RE.test(p.color ?? '')) {
+            !p.displayName.trim() || p.displayName.trim().length > 32 || !COLOR_RE.test(p.color ?? '') || !AVATAR_IDS.has(avatarId)) {
           return socket.emit('room:error', { message: 'Invalid room or participant details.' });
         }
         await leave(socket);
@@ -121,7 +123,7 @@ export function attachRealtime(io, { store, layouts }) {
           return socket.emit('room:error', { message: 'This room is full.' });
         }
         const user = {
-          id: p.id, name: p.displayName.trim(), color: p.color,
+          id: p.id, name: p.displayName.trim(), color: p.color, avatarId,
           x: clamp(num(p.x) ? p.x : SPAWN.x, 0, WORLD.width),
           y: clamp(num(p.y) ? p.y : SPAWN.y, 0, WORLD.height),
         };
