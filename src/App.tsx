@@ -1,14 +1,23 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export default function App() {
   const revealImgRef = useRef<HTMLDivElement>(null);
   const avatarSectionRef = useRef<HTMLElement>(null);
+  const mapSectionRef = useRef<HTMLElement>(null);
+  
+  // State for map selection
+  const [selectedMap, setSelectedMap] = useState<number>(1);
 
   const scrollToAvatar = () => {
     avatarSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  const scrollToMap = () => {
+    mapSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
   useEffect(() => {
+    // 1. Text Animation Splitting
     const wordElements = document.querySelectorAll<HTMLElement>('.words-pull-up');
     
     wordElements.forEach((el) => {
@@ -51,6 +60,7 @@ export default function App() {
       }
     });
 
+    // 2. Intersection Observers (Now applies to the whole scrolling page)
     if ('IntersectionObserver' in window) {
       const pullObserver = new IntersectionObserver((entries, obs) => {
         entries.forEach(entry => {
@@ -85,6 +95,7 @@ export default function App() {
       });
     }
 
+    // 3. Spotlight Mask
     const handleMove = (e: MouseEvent | TouchEvent) => {
       const revealImg = revealImgRef.current;
       if (!revealImg) return;
@@ -122,6 +133,13 @@ export default function App() {
     };
   }, []);
 
+  const mapData = [
+    { id: 1, name: "Central Hub", desc: "Main collaboration area. High traffic, open floor.", tag: "50+ Online" },
+    { id: 2, name: "Breakroom", desc: "Casual proximity chat. Low acoustic barriers.", tag: "12 Online" },
+    { id: 3, name: "Meeting Rooms", desc: "Private enclaves with hard audio cut-offs.", tag: "4 Active" },
+    { id: 4, name: "Deep Work Zone", desc: "Muted zones. Audio strictly limited to 2m radius.", tag: "Quiet" }
+  ];
+
   return (
     <>
       <style>{`
@@ -134,6 +152,7 @@ export default function App() {
           --bg-main: #f1f5f9;       /* Light Grey-White background */
           --card: rgba(255, 255, 255, 0.85); /* White glassmorphism */
           --card-border: rgba(0, 0, 0, 0.1); /* Subtle dark border */
+          --highlight: #3b82f6;     /* Blue highlight for selections */
         }
         
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -222,12 +241,12 @@ export default function App() {
         .spec-value { font-size: 12.5px; font-weight: 700; color: var(--cream); text-align: right; white-space: nowrap; }
 
         /* ========================================================
-           AVATAR SECTION (Scrolls below Hero)
+           AVATAR SECTION
            ======================================================== */
         .avatar-section {
           width: 100%; min-height: 100vh;
           display: flex; justify-content: center; align-items: center; 
-          background-color: #cbd5e1; /* Slightly darker grey background */
+          background-color: #cbd5e1; 
           background-image: radial-gradient(circle at 50% 0%, rgba(0, 0, 0, 0.06) 0%, transparent 60%);
           padding: 80px 20px;
         }
@@ -263,7 +282,7 @@ export default function App() {
           transition: all 0.2s; display: flex; justify-content: center; align-items: center; overflow: hidden;
         }
         .avatar-circle:hover { border-color: rgba(0,0,0,0.2); }
-        .avatar-circle.selected { border-color: var(--accent); box-shadow: 0 4px 12px rgba(0,0,0,0.1); background: #cbd5e1; }
+        .avatar-circle.selected { border-color: var(--accent); box-shadow: 0 4px 12px rgba(0,0,0,0.1); background: #94a3b8; }
 
         .action-btn {
           width: 100%; background: var(--accent); color: #ffffff; border: none; padding: 14px; border-radius: 8px;
@@ -271,6 +290,58 @@ export default function App() {
         }
         .action-btn:hover { opacity: 0.9; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
         
+        /* ========================================================
+           MAP SELECTION SECTION
+           ======================================================== */
+        .map-section {
+          width: 100%; min-height: 100vh;
+          display: flex; flex-direction: column; align-items: center; justify-content: center;
+          background-color: #f1f5f9;
+          padding: 80px 20px;
+        }
+
+        .map-header {
+          text-align: center; margin-bottom: 50px; max-width: 600px;
+        }
+
+        .map-grid {
+          display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px;
+          width: 100%; max-width: 900px;
+        }
+
+        .map-card {
+          background: rgba(255,255,255,0.95);
+          border: 2px solid transparent;
+          border-radius: 20px;
+          padding: 20px;
+          cursor: pointer;
+          transition: all 0.25s ease;
+          position: relative;
+          box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+        }
+        .map-card:hover {
+          transform: translateY(-4px);
+          box-shadow: 0 12px 24px rgba(0,0,0,0.08);
+          border-color: rgba(15, 23, 42, 0.2);
+        }
+        .map-card.active {
+          border-color: var(--accent);
+          box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+        }
+        
+        .map-img {
+          width: 100%; height: 160px; background: #e2e8f0; border-radius: 12px; margin-bottom: 16px;
+          background-size: cover; background-position: center;
+          position: relative; overflow: hidden;
+        }
+        
+        .map-tag {
+          position: absolute; top: 10px; right: 10px; background: rgba(255,255,255,0.9);
+          padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; color: var(--accent);
+          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        /* Animations */
         @keyframes heroImageIn { from { opacity: 0; transform: scale(1.1); } to { opacity: 1; transform: scale(1); } }
         .hero-image-animate { animation: heroImageIn 1.2s cubic-bezier(0.25,0.46,0.45,0.94) forwards; animation-delay: 0.1s; }
         
@@ -289,6 +360,7 @@ export default function App() {
           .hero-page { top: 24px; right: 20px; }
           .specs { grid-row: 3; grid-column: 1; justify-self: stretch; width: 100%; margin-top: 8px; }
           .avatar-panel { grid-template-columns: 1fr; gap: 20px; padding: 25px; }
+          .map-grid { grid-template-columns: 1fr; }
         }
         @media (max-width: 720px) {
           .hero { height: auto; min-height: 100vh; min-height: 100dvh; }
@@ -328,7 +400,6 @@ export default function App() {
                   <h2 className="words-pull-up">SPATIAL MIXER</h2>
                   <p className="fade-up-reveal" data-delay="1.05">Active connections dynamically pan and gain based on 100px earshot.</p>
                 </div>
-                {/* Scroll button triggers scroll to section below */}
                 <button className="cart-btn fade-up-reveal" data-delay="1.15" onClick={scrollToAvatar}>
                   Enter Office
                 </button>
@@ -360,13 +431,14 @@ export default function App() {
         </main>
 
         {/* =========================================
-            2. AVATAR SETUP SECTION (Below Hero)
+            2. AVATAR SETUP SECTION 
             ========================================= */}
         <section ref={avatarSectionRef} className="avatar-section">
-            <div className="avatar-panel fade-up-reveal is-visible" style={{ animationDelay: '0.2s' }}>
+            <div className="avatar-panel fade-up-reveal" data-delay="0.1">
                 <div className="panel-col">
                   <h3 className="panel-title heading-font">1. Create Avatar</h3>
                   <div className="upload-box">
+                      {/* Fixed: changed margin-bottom string back to camelCase marginBottom */}
                       <span style={{ fontSize: '24px', marginBottom: '8px' }}>📷</span>
                       <p>Drag & Drop Photo</p>
                   </div>
@@ -389,9 +461,43 @@ export default function App() {
                   
                   <div style={{ marginTop: 'auto' }}>
                       <input type="text" className="text-input" placeholder="Enter Display Name" style={{ marginBottom: '15px' }} />
-                      <button className="action-btn">Launch Map</button>
+                      <button className="action-btn" onClick={scrollToMap}>Next: Select Map</button>
                   </div>
                 </div>
+            </div>
+        </section>
+
+        {/* =========================================
+            3. WORKSPACE MAP SELECTION SECTION
+            ========================================= */}
+        <section ref={mapSectionRef} className="map-section">
+            <div className="map-header fade-up-reveal" data-delay="0.1">
+                <h2 className="heading-font" style={{fontSize: '32px', color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Select Workspace</h2>
+                <p style={{color: 'var(--muted)', marginTop: '12px', fontSize: '15px'}}>Choose your starting point in the ProxiSpeak ecosystem to begin spatial collaboration.</p>
+            </div>
+
+            <div className="map-grid fade-up-reveal" data-delay="0.2">
+                {mapData.map((map) => (
+                  <div 
+                    key={map.id} 
+                    className={`map-card ${selectedMap === map.id ? 'active' : ''}`}
+                    onClick={() => setSelectedMap(map.id)}
+                  >
+                    <div className="map-img" style={{
+                      backgroundImage: `url('https://images.higgs.ai/?default=1&output=webp&url=https%3A%2F%2Fd8j0ntlcm91z4.cloudfront.net%2Fuser_38xzZboKViGWJOttwIXH07lWA1P%2Fhf_20260831_123709_183f0065-efb2-4bb2-a849-13aaa5af2f3f.png&w=1920&q=85')`, 
+                      filter: selectedMap === map.id ? 'grayscale(0%)' : 'grayscale(100%)',
+                      transition: 'filter 0.3s ease'
+                    }}>
+                      <div className="map-tag">{map.tag}</div>
+                    </div>
+                    <h3 className="heading-font" style={{color: 'var(--accent)', fontSize: '18px', marginBottom: '6px'}}>{map.name}</h3>
+                    <p style={{color: 'var(--muted)', fontSize: '13px', lineHeight: '1.5'}}>{map.desc}</p>
+                  </div>
+                ))}
+            </div>
+
+            <div className="fade-up-reveal" data-delay="0.3" style={{ width: '100%', maxWidth: '900px', display: 'flex', justifyContent: 'flex-end', marginTop: '30px' }}>
+                <button className="action-btn" style={{ maxWidth: '280px', margin: '0' }}>Enter Workspace</button>
             </div>
         </section>
 
