@@ -11,7 +11,7 @@ const STYLES = `
   html, body { background-color: var(--bg-main); color: var(--cream); font-family: 'Inter', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
   .scroll-container { height: 100vh; overflow-y: auto; overflow-x: hidden; scroll-behavior: smooth; }
   h1, h2, h3, .heading-font { font-family: 'Orbitron', 'Arial Narrow', sans-serif; font-weight: 700; letter-spacing: 0.02em; }
-  button { font-family: inherit; cursor: pointer; outline: none; }
+  button { font-family: inherit; cursor: pointer; outline: none; border: none; }
   
   /* HERO */
   .hero { position: relative; width: 100%; height: 100vh; height: 100dvh; overflow: hidden; background-color: var(--bg-main); }
@@ -73,12 +73,29 @@ const STYLES = `
   .key-btn { background: #fff; border: 1px solid #ccc; padding: 2px 6px; border-radius: 4px; box-shadow: 0 2px 0 #ccc; }
   
   .sprite { position: absolute; width: 44px; height: 44px; transform: translate(-50%, -50%); z-index: 20; }
-  .sprite-img { width: 100%; height: 100%; border-radius: 50%; border: 2px solid var(--accent); background: #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.15); object-fit: cover; }
+  .sprite-img { width: 100%; height: 100%; border-radius: 50%; border: 2px solid var(--accent); background: #fff; object-fit: cover; transition: box-shadow 0.1s linear; }
   .sprite-name { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); background: rgba(15, 23, 42, 0.85); color: #fff; font-size: 11px; font-weight: 600; padding: 4px 8px; border-radius: 6px; pointer-events: none; white-space: nowrap; backdrop-filter: blur(4px); box-shadow: 0 2px 6px rgba(0,0,0,0.1); display: flex; flex-direction: column; align-items: center; }
   .audio-bar { width: 100%; height: 4px; background: rgba(255,255,255,0.2); border-radius: 2px; margin-top: 4px; overflow: hidden; }
   .audio-fill { height: 100%; background: var(--lime); transition: width 0.1s linear; }
 
-  .proximity-ring { position: absolute; width: 250px; height: 250px; transform: translate(-50%, -50%); border: 2px dashed rgba(132, 204, 22, 0.6); border-radius: 50%; background: rgba(132, 204, 22, 0.08); pointer-events: none; z-index: 10; }
+  .proximity-ring { position: absolute; width: 250px; height: 250px; transform: translate(-50%, -50%); border: 2px dashed rgba(132, 204, 22, 0.6); border-radius: 50%; background: rgba(132, 204, 22, 0.08); pointer-events: none; z-index: 10; transition: background 0.3s ease; }
+  .proximity-ring.active { background: rgba(132, 204, 22, 0.15); border: 2px solid rgba(132, 204, 22, 0.8); }
+
+  /* TOOLBAR */
+  .toolbar {
+    position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(16px);
+    border: 1px solid rgba(255,255,255,0.1); padding: 10px 20px;
+    border-radius: 999px; display: flex; gap: 12px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); z-index: 100;
+  }
+  .tool-btn {
+    width: 44px; height: 44px; border-radius: 50%; background: #1e293b; color: #fff;
+    display: flex; justify-content: center; align-items: center; font-size: 18px; border: 1px solid rgba(255,255,255,0.05); transition: all 0.2s;
+  }
+  .tool-btn:hover { background: #334155; transform: translateY(-2px); }
+  .tool-btn.active { background: var(--lime); color: #000; }
+  .tool-btn.danger { background: rgba(239, 68, 68, 0.2); color: #f87171; border-color: rgba(239, 68, 68, 0.3); }
+  .tool-btn.danger:hover { background: rgba(239, 68, 68, 0.4); }
 
   /* Animations */
   @keyframes heroImageIn { from { opacity: 0; transform: scale(1.1); } to { opacity: 1; transform: scale(1); } }
@@ -93,7 +110,6 @@ const STYLES = `
 `;
 
 export default function App() {
-  // Explicitly typed refs to prevent 'never' errors
   const revealImgRef = useRef<HTMLDivElement>(null);
   const avatarSectionRef = useRef<HTMLElement>(null);
   const mapSectionRef = useRef<HTMLElement>(null);
@@ -104,6 +120,14 @@ export default function App() {
   const [playerPos, setPlayerPos] = useState({ x: 400, y: 300 });
   const [serverLogs, setServerLogs] = useState<string[]>([]);
   
+  // Audio State
+  const [micActive, setMicActive] = useState(false);
+  const [micVolume, setMicVolume] = useState<number>(0);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const audioAnimFrameRef = useRef<number>(0);
+
   const posRef = useRef({ x: 400, y: 300 });
   const keys = useRef<{ [key: string]: boolean }>({});
   const lastUpdateRef = useRef<number>(0);
@@ -112,7 +136,6 @@ export default function App() {
   const scrollToMap = () => mapSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
   const scrollToWorkspace = () => workspaceSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
 
-  // Add Log Helper
   const addLog = (message: string) => {
     const time = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 });
     setServerLogs(prev => {
@@ -121,15 +144,72 @@ export default function App() {
     });
   };
 
-  // Scroll to bottom of terminal when logs update
   useEffect(() => {
     if (terminalRef.current) {
       terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
     }
   }, [serverLogs]);
 
+  // Web Audio API Setup
+  const startMicrophone = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      audioContextRef.current = audioContext;
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      analyserRef.current = analyser;
+      
+      const source = audioContext.createMediaStreamSource(stream);
+      source.connect(analyser);
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      const updateVolume = () => {
+        analyser.getByteFrequencyData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          sum += dataArray[i];
+        }
+        const average = sum / dataArray.length;
+        setMicVolume(average);
+        audioAnimFrameRef.current = requestAnimationFrame(updateVolume);
+      };
+      
+      updateVolume();
+      setMicActive(true);
+      addLog("Web Audio API initialized. Microphone active.");
+    } catch (err) {
+      console.error(err);
+      addLog("Microphone access denied or unavailable.");
+    }
+  };
+
+  const stopMicrophone = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+    cancelAnimationFrame(audioAnimFrameRef.current);
+    setMicVolume(0);
+    setMicActive(false);
+    addLog("Microphone disconnected.");
+  };
+
+  const toggleMic = () => {
+    if (micActive) {
+      stopMicrophone();
+    } else {
+      startMicrophone();
+    }
+  };
+
   useEffect(() => {
-    // 1. Text Animation Splitting
     const wordElements = document.querySelectorAll<HTMLElement>('.words-pull-up');
     wordElements.forEach((el) => {
       if (el.dataset.split) return;
@@ -168,7 +248,6 @@ export default function App() {
       }
     });
 
-    // 2. Observers
     if ('IntersectionObserver' in window) {
       const pullObserver = new IntersectionObserver((entries, obs) => {
         entries.forEach(entry => {
@@ -194,7 +273,6 @@ export default function App() {
       document.querySelectorAll<HTMLElement>('.fade-up-reveal').forEach(el => fadeObserver.observe(el));
     }
 
-    // 3. Spotlight
     const handleMove = (e: MouseEvent | TouchEvent) => {
       const revealImg = revealImgRef.current;
       if (!revealImg) return;
@@ -215,7 +293,6 @@ export default function App() {
     window.addEventListener('mousemove', handleMove as EventListener);
     window.addEventListener('touchmove', handleMove as EventListener, { passive: true });
 
-    // 4. Game Loop
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeTag = document.activeElement?.tagName;
       if (activeTag === 'INPUT' || activeTag === 'TEXTAREA') return;
@@ -234,7 +311,7 @@ export default function App() {
 
     let animationFrameId: number;
     const SPEED = 4;
-    const MAP_WIDTH = 800; // Expected Canvas Width
+    const MAP_WIDTH = 800; 
     const MAP_HEIGHT = 560;
 
     const gameLoop = () => {
@@ -249,7 +326,6 @@ export default function App() {
         posRef.current = { x, y };
         setPlayerPos({ x, y });
         
-        // Throttle backend logs to ~every 250ms while moving
         const now = Date.now();
         if (now - lastUpdateRef.current > 250) {
           addLog(`MongoDB $near query executed for [${Math.round(x)}, ${Math.round(y)}]`);
@@ -266,6 +342,7 @@ export default function App() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
       cancelAnimationFrame(animationFrameId);
+      stopMicrophone(); // Clean up audio on unmount
     };
   }, []);
 
@@ -276,7 +353,6 @@ export default function App() {
     { id: 4, name: "Deep Work Zone", desc: "Muted zones. Audio strictly 2m.", tag: "Quiet", count: 8 }
   ];
 
-  // Mock Users
   const otherUsers = [
     { id: 1, name: "Sarah", x: 450, y: 150, avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=Sarah" },
     { id: 2, name: "Dev_Jack", x: 200, y: 380, avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=Jack" },
@@ -292,9 +368,13 @@ export default function App() {
   const getVolume = (ux: number, uy: number) => {
     const dist = Math.sqrt(Math.pow(playerPos.x - ux, 2) + Math.pow(playerPos.y - uy, 2));
     if (dist > PROXIMITY_RADIUS) return 0;
-    // Linear falloff volume (100% at center, 0% at edge)
     return Math.max(0, 1 - (dist / PROXIMITY_RADIUS)) * 100; 
   };
+
+  const connectedPeers = otherUsers.filter(u => isWithinEarshot(u.x, u.y));
+
+  // Avatar glow scales with microphone volume input
+  const avatarGlow = micVolume > 5 ? `0 0 ${Math.min(micVolume, 30)}px rgba(132, 204, 22, 0.8)` : '0 4px 10px rgba(0,0,0,0.15)';
 
   return (
     <>
@@ -426,16 +506,16 @@ export default function App() {
                  </div>
                  
                  {/* Player Proximity Ring */}
-                 <div className="proximity-ring" style={{ left: playerPos.x, top: playerPos.y }}></div>
+                 <div className={`proximity-ring ${connectedPeers.length > 0 ? 'active' : ''}`} style={{ left: playerPos.x, top: playerPos.y }}></div>
 
                  {/* Other Users */}
                  {otherUsers.map(user => {
                    const inEarshot = isWithinEarshot(user.x, user.y);
                    const volume = getVolume(user.x, user.y);
                    
-                   // Dynamic log for WebRTC connection
+                   // Dynamic simulated log for connection
                    if (inEarshot && Math.random() < 0.05) {
-                      addLog(`WebRTC DataChannel update: Received audio chunks from ${user.name}`);
+                      addLog(`WebRTC DataChannel: Streaming from ${user.name}`);
                    }
 
                    return (
@@ -453,12 +533,31 @@ export default function App() {
                    );
                  })}
 
-                 {/* The Player Avatar */}
+                 {/* The Local Player Avatar */}
                  <div className="sprite" style={{ left: playerPos.x, top: playerPos.y, zIndex: 30 }}>
-                    <img src="https://api.dicebear.com/9.x/avataaars/svg?seed=You" alt="You" className="sprite-img" style={{ borderColor: 'var(--lime)', borderWidth: '3px' }} />
+                    <img 
+                      src="https://api.dicebear.com/9.x/avataaars/svg?seed=You" 
+                      alt="You" 
+                      className="sprite-img" 
+                      style={{ 
+                        borderColor: micActive ? 'var(--lime)' : 'rgba(0,0,0,0.4)', 
+                        borderWidth: '3px',
+                        boxShadow: avatarGlow,
+                        transition: 'box-shadow 0.1s linear'
+                      }} 
+                    />
                     <div className="sprite-name" style={{ background: 'var(--accent)' }}>
-                       <span>You</span>
+                       <span>You {micActive && '🎙️'}</span>
                     </div>
+                 </div>
+
+                 {/* Interactive Audio Controls Toolbar */}
+                 <div className="toolbar">
+                   <button className={`tool-btn ${!micActive ? 'danger active' : ''}`} onClick={toggleMic} title="Toggle Mic">
+                     {micActive ? '🎤' : '🔇'}
+                   </button>
+                   <button className="tool-btn" title="Camera (Disabled in Demo)">📹</button>
+                   <button className="tool-btn" title="Screen Share (Disabled in Demo)">💻</button>
                  </div>
               </div>
            </div>
