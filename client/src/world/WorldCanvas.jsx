@@ -9,6 +9,7 @@ const avatarImages = new Map();
 function getAvatarImage(avatar) {
   if (!avatar.image) return null;
   if (!avatarImages.has(avatar.id)) {
+    // Reuse each loaded image instead of creating a new Image on every frame.
     const image = new Image();
     image.src = avatar.image;
     avatarImages.set(avatar.id, image);
@@ -35,6 +36,8 @@ function roundedRectPath(ctx, x, y, width, height, radius) {
 
 export default function WorldCanvas({ world, mixer, hearRadius, onMove, onFrame, onStats, onDebugChange }) {
   const canvasRef = useRef(null);
+  // Keep the animation loop pointed at current props without restarting it
+  // whenever audio state or a callback changes.
   const live = useRef({ mixer, hearRadius, onMove, onFrame, onStats, onDebugChange });
   live.current = { mixer, hearRadius, onMove, onFrame, onStats, onDebugChange };
 
@@ -43,18 +46,22 @@ export default function WorldCanvas({ world, mixer, hearRadius, onMove, onFrame,
     if (!canvas) return undefined;
     const ctx = canvas.getContext('2d');
     if (!ctx) return undefined;
+    // Render at the device's pixel density (capped to limit high-DPI work).
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = WORLD.width * dpr;
     canvas.height = WORLD.height * dpr;
 
+    // Load the office floor image; draw() uses a plain-color fallback meanwhile.
     const bg = new Image();
     bg.src = '/room.png';
 
     // --- input -----------------------------------------------------------
+    // Don't move the character or toggle debug mode while the user is typing.
     const typing = (e) => /INPUT|TEXTAREA|SELECT/.test(e.target?.tagName ?? '');
     const onKeyDown = (e) => {
       if (typing(e) || e.metaKey || e.ctrlKey || e.altKey) return;
       const k = e.key.toLowerCase();
+      // Track held keys so world.js can turn them into movement each frame.
       if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift'].includes(k)) { world.keys.add(k); e.preventDefault(); }
       if (k === 'o' && !e.repeat) {
         world.showDebug = !world.showDebug;
@@ -62,9 +69,11 @@ export default function WorldCanvas({ world, mixer, hearRadius, onMove, onFrame,
       }
     };
     const onKeyUp = (e) => world.keys.delete(e.key.toLowerCase());
+    // Clear held keys if the tab loses focus, avoiding stuck movement.
     const onBlur = () => world.keys.clear();
     const onClick = (e) => {
       const r = canvas.getBoundingClientRect();
+      // Convert the click's screen position into the world's map coordinates.
       world.target = { x: ((e.clientX - r.left) / r.width) * WORLD.width, y: ((e.clientY - r.top) / r.height) * WORLD.height };
     };
     window.addEventListener('keydown', onKeyDown);
@@ -80,23 +89,27 @@ export default function WorldCanvas({ world, mixer, hearRadius, onMove, onFrame,
     let lastSent = { x: world.self.x, y: world.self.y, t: 0 };
 
     const frame = (now) => {
+      // Cap large time steps (for example after returning to a background tab).
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       frames++;
 
+      // Advance local movement and send position updates at most every 50 ms.
       if (stepSelf(world, dt) && now - lastSent.t > 50) {
         lastSent = { x: world.self.x, y: world.self.y, t: now };
         live.current.onMove?.(world.self.x, world.self.y);
       }
-      // smooth remote avatars towards the latest server position
+      // Ease remote avatars toward server updates so network movement looks smooth.
       const ease = 1 - Math.exp(-dt * 14);
       for (const u of world.users.values()) {
         u.rx += (u.x - u.rx) * ease;
         u.ry += (u.y - u.ry) * ease;
       }
+      // Let the parent update per-frame behavior, then redraw the complete map.
       live.current.onFrame?.(dt);
       draw(ctx, dpr, world, bg, live.current.mixer, live.current.hearRadius);
 
+      // Report an approximate frame rate twice per second, not on every frame.
       if (now - statsAt >= 500) {
         live.current.onStats?.({ fps: Math.round((frames * 1000) / (now - statsAt)) });
         frames = 0;
@@ -107,6 +120,7 @@ export default function WorldCanvas({ world, mixer, hearRadius, onMove, onFrame,
     raf = requestAnimationFrame(frame);
 
     return () => {
+      // Stop the animation and detach listeners when the canvas unmounts or world changes.
       cancelAnimationFrame(raf);
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
@@ -119,11 +133,13 @@ export default function WorldCanvas({ world, mixer, hearRadius, onMove, onFrame,
 }
 
 function draw(ctx, dpr, world, bg, mixer, hearRadius) {
+  // Reset canvas scaling and clear the previous frame before painting this one.
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, WORLD.width, WORLD.height);
   if (bg.complete && bg.naturalWidth) ctx.drawImage(bg, 0, 0, WORLD.width, WORLD.height);
   else { ctx.fillStyle = '#f1f1ef'; ctx.fillRect(0, 0, WORLD.width, WORLD.height); }
 
+  // Obstacle overlays are only for debugging; they don't affect the floor image.
   if (world.showDebug) {
     for (const o of world.obstacles) {
       ctx.fillStyle = o.kind === 'wall' ? 'rgba(220,60,60,.45)' : 'rgba(230,160,40,.4)';
@@ -132,7 +148,7 @@ function draw(ctx, dpr, world, bg, mixer, hearRadius) {
   }
 
   const me = world.self;
-  // earshot radius
+  // Show the local voice range so it is clear which nearby users can be heard.
   ctx.save();
   ctx.beginPath();
   ctx.arc(me.x, me.y, hearRadius ?? HEAR_RADIUS, 0, Math.PI * 2);
@@ -147,7 +163,7 @@ function draw(ctx, dpr, world, bg, mixer, hearRadius) {
   ctx.stroke();
   ctx.restore();
 
-  // lines to connected peers, thickness follows the current gain
+  // Connect the local avatar to active audio peers; line weight reflects volume.
   for (const id of world.connected) {
     const u = world.users.get(id);
     if (!u) continue;
@@ -162,11 +178,13 @@ function draw(ctx, dpr, world, bg, mixer, hearRadius) {
     ctx.setLineDash([]);
   }
 
+  // Draw users back-to-front so avatars lower on the map appear in front.
   const people = [...world.users.values()].filter((u) => u.id !== world.selfId).map((u) => ({ ...u, self: false }));
   people.push({ id: world.selfId, name: world.selfName ?? 'You', color: world.selfColor ?? '#e5bd83', avatarId: world.selfAvatarId, rx: me.x, ry: me.y, self: true });
   people.sort((a, b) => a.ry - b.ry);
 
   for (const p of people) {
+    // A voice activity level above the threshold marks a remote user as speaking.
     const speaking = !p.self && mixer && mixer.levelOf(p.id) > 0.08;
     ctx.beginPath();
     ctx.ellipse(p.rx, p.ry + 10, AVATAR_DISPLAY_RADIUS + 4, AVATAR_DISPLAY_RADIUS * 0.62, 0, 0, Math.PI * 2);
@@ -186,6 +204,7 @@ function draw(ctx, dpr, world, bg, mixer, hearRadius) {
     ctx.beginPath();
     ctx.arc(p.rx, p.ry, AVATAR_DISPLAY_RADIUS, 0, Math.PI * 2);
     const avatar = avatarById(p.avatarId);
+    // Fill and clip to a circle, then show the image, emoji, or name initials.
     ctx.fillStyle = avatar.background ?? p.color;
     ctx.fill();
     ctx.clip();
@@ -240,6 +259,7 @@ function draw(ctx, dpr, world, bg, mixer, hearRadius) {
     ctx.textAlign = 'center';
   }
 
+  // Mark the destination selected by the user's last map click.
   if (world.target) {
     ctx.beginPath();
     ctx.arc(world.target.x, world.target.y, 5, 0, Math.PI * 2);
@@ -250,6 +270,7 @@ function draw(ctx, dpr, world, bg, mixer, hearRadius) {
 }
 
 function roundedRect(ctx, x, y, width, height, radius) {
+  // Use the native canvas API where available, with a path-based fallback.
   if (typeof ctx.roundRect === 'function') {
     ctx.roundRect(x, y, width, height, radius);
     return;
