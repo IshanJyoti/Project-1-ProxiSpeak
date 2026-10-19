@@ -97,6 +97,26 @@ const STYLES = `
   .tool-btn.danger { background: rgba(239, 68, 68, 0.2); color: #f87171; border-color: rgba(239, 68, 68, 0.3); }
   .tool-btn.danger:hover { background: rgba(239, 68, 68, 0.4); }
 
+  /* CONTACT SECTION */
+  .contact-section { 
+    width: 100%; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; 
+    background-color: #f1f5f9; padding: 80px 20px; border-top: 1px solid rgba(0,0,0,0.05); 
+  }
+  .contact-header { text-align: center; margin-bottom: 50px; max-width: 600px; }
+  .contact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; width: 100%; max-width: 1000px; }
+  .contact-card { 
+    background: rgba(255,255,255,0.95); border: 1px solid var(--card-border); 
+    border-radius: 24px; padding: 40px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); 
+  }
+  .contact-card h3 { color: var(--accent); margin-bottom: 20px; font-size: 20px; }
+  .contact-form { display: flex; flex-direction: column; gap: 15px; }
+  .contact-links { display: flex; flex-direction: column; gap: 15px; }
+  .link-item { 
+    display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: 12px; 
+    background: #e2e8f0; color: var(--accent); font-weight: 600; text-decoration: none; transition: all 0.2s; 
+  }
+  .link-item:hover { background: var(--accent); color: #fff; transform: translateY(-2px); box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
+
   /* Animations */
   @keyframes heroImageIn { from { opacity: 0; transform: scale(1.1); } to { opacity: 1; transform: scale(1); } }
   .hero-image-animate { animation: heroImageIn 1.2s cubic-bezier(0.25,0.46,0.45,0.94) forwards; animation-delay: 0.1s; }
@@ -107,6 +127,19 @@ const STYLES = `
   @keyframes fadeUp { from { opacity: 0; transform: translateY(14px); filter: blur(4px); } to { opacity: 1; transform: translateY(0); filter: blur(0); } }
   .fade-up-reveal { opacity: 0; transform: translateY(14px); filter: blur(4px); }
   .fade-up-reveal.is-visible { animation: fadeUp 0.6s ease forwards; }
+
+  @media (max-width: 768px) {
+    .contact-grid { grid-template-columns: 1fr; }
+    .hero-ui { grid-template-columns: 1fr; grid-template-rows: auto 1fr auto; padding: 24px 20px 28px 20px; }
+    .hero-left { grid-row: 1 / 3; gap: 24px; }
+    .hero-page { top: 24px; right: 20px; }
+    .specs { grid-row: 3; grid-column: 1; justify-self: stretch; width: 100%; margin-top: 8px; }
+    .avatar-panel { grid-template-columns: 1fr; gap: 20px; padding: 25px; }
+    .map-grid { grid-template-columns: 1fr; }
+    .workspace-layout { flex-direction: column; height: auto; }
+    .server-panel { width: 100%; }
+    .map-canvas { height: 400px; }
+  }
 `;
 
 export default function App() {
@@ -115,6 +148,7 @@ export default function App() {
   const mapSectionRef = useRef<HTMLElement>(null);
   const workspaceSectionRef = useRef<HTMLElement>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
+  const contactSectionRef = useRef<HTMLElement>(null);
   
   const [selectedMap, setSelectedMap] = useState<number>(1);
   const [playerPos, setPlayerPos] = useState({ x: 400, y: 300 });
@@ -135,6 +169,7 @@ export default function App() {
   const scrollToAvatar = () => avatarSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
   const scrollToMap = () => mapSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
   const scrollToWorkspace = () => workspaceSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const scrollToContact = () => contactSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
 
   const addLog = (message: string) => {
     const time = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 });
@@ -558,9 +593,57 @@ export default function App() {
                    </button>
                    <button className="tool-btn" title="Camera (Disabled in Demo)">📹</button>
                    <button className="tool-btn" title="Screen Share (Disabled in Demo)">💻</button>
+                   <button className="tool-btn" title="Contact Us" onClick={scrollToContact}>✉️</button>
                  </div>
               </div>
            </div>
+        </section>
+
+        {/* CONTACT & REACH OUT SECTION */}
+        <section ref={contactSectionRef} className="contact-section">
+          <div className="contact-header fade-up-reveal" data-delay="0.1">
+            <h2 className="heading-font" style={{fontSize: '32px', color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Reach Out & More</h2>
+            <p style={{color: 'var(--muted)', marginTop: '12px', fontSize: '15px'}}>Connect with the developers or explore the ProxiSpeak ecosystem.</p>
+          </div>
+
+          <div className="contact-grid">
+            {/* Contact Form */}
+            <div className="contact-card fade-up-reveal" data-delay="0.2">
+              <h3 className="heading-font">Send a Message</h3>
+              <form className="contact-form" onSubmit={(e) => { e.preventDefault(); alert('Message sent!'); }}>
+                <input type="text" className="text-input" placeholder="Your Name" required />
+                <input type="email" className="text-input" placeholder="Your Email" required />
+                <textarea className="text-input" rows={4} placeholder="How can we help?" required></textarea>
+                <button type="submit" className="action-btn" style={{marginTop: '10px'}}>Send Message</button>
+              </form>
+            </div>
+
+            {/* More / Links */}
+            <div className="contact-card fade-up-reveal" data-delay="0.3">
+              <h3 className="heading-font">Explore More</h3>
+              <div className="contact-links">
+                <a href="#" className="link-item" onClick={(e) => e.preventDefault()}>
+                  <span style={{fontSize: '20px'}}>🐙</span> GitHub Repository
+                </a>
+                <a href="#" className="link-item" onClick={(e) => e.preventDefault()}>
+                  <span style={{fontSize: '20px'}}>📚</span> Documentation
+                </a>
+                <a href="#" className="link-item" onClick={(e) => e.preventDefault()}>
+                  <span style={{fontSize: '20px'}}>💬</span> Join the Discord
+                </a>
+                <a href="#" className="link-item" onClick={(e) => e.preventDefault()}>
+                  <span style={{fontSize: '20px'}}>🐦</span> Follow on Twitter
+                </a>
+              </div>
+              
+              <div style={{marginTop: '40px', padding: '20px', background: '#f1f5f9', borderRadius: '12px', textAlign: 'center'}}>
+                <p style={{fontSize: '13px', color: 'var(--muted)', fontWeight: '600'}}>
+                  ProxiSpeak v1.0.0<br/>
+                  © 2026 Neural Edges Inc.
+                </p>
+              </div>
+            </div>
+          </div>
         </section>
 
       </div>
