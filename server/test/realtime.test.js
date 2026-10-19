@@ -99,6 +99,24 @@ test('selected avatars are shared with room members and restored in snapshots', 
   assert.equal(snapshot.data.users.find((user) => user.id === 'user-a').avatarId, 'aman');
 });
 
+test('microphone mute state is shared and restored in room snapshots', async () => {
+  const io = makeIo();
+  const store = new MemoryGeoStore();
+  attachRealtime(io, { store, layouts: { get: async () => [] } });
+  const a = io.connect();
+  const b = io.connect();
+
+  await join(a, 'user-a', 100, 300);
+  assert.equal((await store.get('main-office', 'user-a')).muted, true);
+  await a.h['voice:status']({ muted: false });
+  assert.equal((await store.get('main-office', 'user-a')).muted, false);
+  assert.ok(events(io, 'voice:status').some((event) => event.data.id === 'user-a' && event.data.muted === false));
+
+  await join(b, 'user-b', 500, 300);
+  const snapshot = b.out.find((event) => event.ev === 'world:snapshot');
+  assert.equal(snapshot.data.users.find((user) => user.id === 'user-a').muted, false);
+});
+
 test('server rejects unknown avatar selections', async () => {
   const io = makeIo();
   attachRealtime(io, { store: new MemoryGeoStore(), layouts: { get: async () => [] } });

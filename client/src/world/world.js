@@ -11,12 +11,14 @@ export function createWorld() {
     selfId: null,
     selfName: 'You',
     selfAvatarId: 'initials',
+    selfMuted: true,
     self: { x: SPAWN.x, y: SPAWN.y },
-    users: new Map(),      // id -> { id, name, color, x, y, rx, ry }  (x,y = server truth, rx,ry = rendered)
+    users: new Map(),      // id -> { id, name, color, x, y, rx, ry, muted }  (x,y = server truth, rx,ry = rendered)
     obstacles: [],
     keys: new Set(),
     target: null,          // click-to-walk destination
     connected: new Set(),  // peer ids with a live WebRTC audio link
+    connectionStatuses: new Map(),
     showDebug: false,
   };
 }

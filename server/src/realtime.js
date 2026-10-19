@@ -112,7 +112,8 @@ export function attachRealtime(io, { store, layouts }) {
         const p = payload?.participant;
         const avatarId = p?.avatarId ?? DEFAULT_AVATAR_ID;
         if (!ROOM_RE.test(payload?.roomId ?? '') || !p || !ID_RE.test(p.id) || typeof p.displayName !== 'string' ||
-            !p.displayName.trim() || p.displayName.trim().length > 32 || !COLOR_RE.test(p.color ?? '') || !AVATAR_IDS.has(avatarId)) {
+            !p.displayName.trim() || p.displayName.trim().length > 32 || !COLOR_RE.test(p.color ?? '') || !AVATAR_IDS.has(avatarId) ||
+            (p.muted !== undefined && typeof p.muted !== 'boolean')) {
           return socket.emit('room:error', { message: 'Invalid room or participant details.' });
         }
         await leave(socket);
@@ -124,11 +125,12 @@ export function attachRealtime(io, { store, layouts }) {
         }
         const user = {
           id: p.id, name: p.displayName.trim(), color: p.color, avatarId,
+          muted: p.muted ?? true,
           x: clamp(num(p.x) ? p.x : SPAWN.x, 0, WORLD.width),
           y: clamp(num(p.y) ? p.y : SPAWN.y, 0, WORLD.height),
         };
         await store.upsert(roomId, user);
-        localRoom(roomId).set(user.id, { socketId: socket.id, peers: new Set() });
+        localRoom(roomId).set(user.id, { socketId: socket.id, peers: new Set(), muted: user.muted });
         Object.assign(socket.data, { roomId, userId: user.id, lastMoveAt: 0 });
         await socket.join([roomId, `user:${user.id}`]);
         socket.emit('layout:update', { roomId, obstacles: await layouts.get(roomId), hearRadius: hearRadiusFor(roomId) });
@@ -149,6 +151,23 @@ export function attachRealtime(io, { store, layouts }) {
       socket.data.lastMoveAt = now;
       if (!pending.has(roomId)) pending.set(roomId, new Map());
       pending.get(roomId).set(userId, { id: userId, x: clamp(m.x, 0, WORLD.width), y: clamp(m.y, 0, WORLD.height) });
+    });
+
+    socket.on('voice:status', async ({ muted } = {}) => {
+      const { roomId, userId } = socket.data;
+      const entry = roomId && local.get(roomId)?.get(userId);
+      if (!entry) return;
+      if (typeof muted !== 'boolean') {
+        socket.emit('room:error', { message: 'Invalid microphone status.' });
+        return;
+      }
+      try {
+        await store.updateVoiceStatus(roomId, userId, muted);
+        entry.muted = muted;
+        io.to(roomId).emit('voice:status', { id: userId, muted });
+      } catch (err) {
+        console.error('[voice:status]', err);
+      }
     });
 
     // WebRTC handshake relay, only allowed between avatars that are within earshot.

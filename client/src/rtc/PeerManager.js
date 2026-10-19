@@ -9,13 +9,19 @@ export class PeerManager {
   constructor({ socket, roomId, selfId, stream, mixer, onChange }) {
     Object.assign(this, { socket, roomId, selfId, stream, mixer, onChange });
     this.peers = new Map(); // id -> { pc, pendingIce, retry }
+    this.statuses = new Map();
+    this.statusTimers = new Map();
   }
 
   has(id) { return this.peers.has(id); }
   ids() { return [...this.peers.keys()]; }
+  statusOf(id) { return this.statuses.get(id) ?? 'outside'; }
 
   enter(id) {
     if (id === this.selfId || this.peers.has(id)) return;
+    clearTimeout(this.statusTimers.get(id));
+    this.statusTimers.delete(id);
+    this.statuses.set(id, 'connecting');
     const pc = new RTCPeerConnection({ iceServers });
     const peer = { pc, pendingIce: [], retry: null };
     this.peers.set(id, peer);
@@ -24,7 +30,10 @@ export class PeerManager {
     pc.onicecandidate = (e) => e.candidate && this.send(id, 'ice', e.candidate.toJSON());
     pc.ontrack = (e) => { if (e.streams[0]) { this.mixer.addPeer(id, e.streams[0]); this.onChange?.(); } };
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'connected') this.onChange?.();
+      if (pc.connectionState === 'connected') this.statuses.set(id, 'connected');
+      else if (pc.connectionState === 'disconnected' || pc.connectionState === 'closed' || pc.connectionState === 'failed') this.statuses.set(id, 'disconnecting');
+      else this.statuses.set(id, 'connecting');
+      this.onChange?.();
       if (pc.connectionState === 'failed') this.recover(id);
     };
     if (this.selfId.localeCompare(id) < 0) this.makeOffer(id, pc);
@@ -82,16 +91,27 @@ export class PeerManager {
   leave(id) {
     const peer = this.peers.get(id);
     if (!peer) return;
+    this.statuses.set(id, 'disconnecting');
     peer.pc.ontrack = peer.pc.onicecandidate = peer.pc.onconnectionstatechange = null;
     try { peer.pc.close(); } catch { /* closed */ }
     this.mixer.removePeer(id);
     this.peers.delete(id);
     this.onChange?.();
+    clearTimeout(this.statusTimers.get(id));
+    this.statusTimers.set(id, setTimeout(() => {
+      this.statusTimers.delete(id);
+      this.statuses.delete(id);
+      this.onChange?.();
+    }, 1000));
   }
 
   closeAll() {
     this.retryTimers?.forEach(clearTimeout);
     for (const id of this.ids()) this.leave(id);
+    for (const timer of this.statusTimers.values()) clearTimeout(timer);
+    this.statusTimers.clear();
+    this.statuses.clear();
+    this.onChange?.();
   }
 
   send(to, kind, payload) { this.socket.emit('rtc:signal', { roomId: this.roomId, to, kind, payload }); }

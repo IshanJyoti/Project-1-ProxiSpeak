@@ -14,6 +14,10 @@ export class MemoryGeoStore {
     const room = this._room(roomId);
     for (const m of moves) { const u = room.get(m.id); if (u) { u.x = m.x; u.y = m.y; } }
   }
+  async updateVoiceStatus(roomId, id, muted) {
+    const user = this._room(roomId).get(id);
+    if (user) user.muted = muted;
+  }
   async touch() {}
   async remove(roomId, id) { this._room(roomId).delete(id); }
   async get(roomId, id) { return this._room(roomId).get(id) ?? null; }

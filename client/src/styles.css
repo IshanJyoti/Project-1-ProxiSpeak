@@ -162,6 +162,11 @@ button.primary:hover:not(:disabled) { border-color: #0c745d; background: #0f795f
 .self-dot { outline: 2px solid #d9f1e5; }
 .person-name { min-width: 0; flex: 1; overflow: hidden; color: #3c4a46; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
 .person-name small { display: block; margin-top: 3px; color: #9aa39f; font-size: 9px; font-weight: 500; }
+.person-name .connection-status { color: #87938e; }
+.person-name .connection-status.is-connecting, .person-name .connection-status.is-disconnecting { color: #aa741e; }
+.person-name .connection-status.is-connected { color: #358165; }
+.person-name .voice-status.is-muted { color: #aa741e; }
+.person-name .voice-status.is-speaking { color: #16866c; font-weight: 700; }
 .online-dot { width: 6px; height: 6px; margin-right: 4px; }
 .people .empty-roster { min-height: auto; padding: 2px 0 4px; color: #97a19c; font-size: 10px; line-height: 1.5; }
 

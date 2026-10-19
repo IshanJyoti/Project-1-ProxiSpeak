@@ -180,12 +180,15 @@ function draw(ctx, dpr, world, bg, mixer, hearRadius) {
 
   // Draw users back-to-front so avatars lower on the map appear in front.
   const people = [...world.users.values()].filter((u) => u.id !== world.selfId).map((u) => ({ ...u, self: false }));
-  people.push({ id: world.selfId, name: world.selfName ?? 'You', color: world.selfColor ?? '#e5bd83', avatarId: world.selfAvatarId, rx: me.x, ry: me.y, self: true });
+  people.push({ id: world.selfId, name: world.selfName ?? 'You', color: world.selfColor ?? '#e5bd83', avatarId: world.selfAvatarId, muted: world.selfMuted, rx: me.x, ry: me.y, self: true });
   people.sort((a, b) => a.ry - b.ry);
 
   for (const p of people) {
     // A voice activity level above the threshold marks a remote user as speaking.
     const speaking = !p.self && mixer && mixer.levelOf(p.id) > 0.08;
+    const connection = world.connectionStatuses.get(p.id) ?? 'outside';
+    const voiceStatus = p.muted ? 'Muted' : speaking ? 'Speaking' : 'Mic on';
+    const connectionText = { connecting: 'Connecting', connected: 'Connected', disconnecting: 'Disconnecting', outside: 'Out of range' }[connection] ?? 'Unavailable';
     ctx.beginPath();
     ctx.ellipse(p.rx, p.ry + 10, AVATAR_DISPLAY_RADIUS + 4, AVATAR_DISPLAY_RADIUS * 0.62, 0, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(31, 42, 53, .23)';
@@ -245,17 +248,25 @@ function draw(ctx, dpr, world, bg, mixer, hearRadius) {
     ctx.font = '700 11px system-ui, sans-serif';
     const label = p.self ? `${p.name} (You)` : p.name;
     const labelWidth = ctx.measureText(label).width;
-    const w = labelWidth + 32;
+    const statusText = p.self ? voiceStatus : `${connectionText} · ${voiceStatus}`;
+    ctx.font = '600 9px system-ui, sans-serif';
+    const statusWidth = ctx.measureText(statusText).width;
+    const w = Math.max(labelWidth, statusWidth) + 32;
     ctx.fillStyle = 'rgba(19, 34, 45, .86)';
-    roundedRect(ctx, p.rx - w / 2, p.ry - AVATAR_DISPLAY_RADIUS - 21, w, 17, 6);
+    const labelY = p.ry - AVATAR_DISPLAY_RADIUS - 21;
+    roundedRect(ctx, p.rx - w / 2, labelY, w, 30, 6);
     ctx.fill();
     ctx.beginPath();
-    ctx.arc(p.rx - w / 2 + 9, p.ry - AVATAR_DISPLAY_RADIUS - 12.5, 2, 0, Math.PI * 2);
-    ctx.fillStyle = speaking ? '#61e0b5' : p.self ? '#78e1bc' : '#d6e2e0';
+    ctx.arc(p.rx - w / 2 + 9, labelY + 8.5, 2, 0, Math.PI * 2);
+    ctx.fillStyle = speaking ? '#61e0b5' : p.muted ? '#e8a83f' : p.self ? '#78e1bc' : '#d6e2e0';
     ctx.fill();
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'left';
-    ctx.fillText(label, p.rx - w / 2 + 21, p.ry - AVATAR_DISPLAY_RADIUS - 12.5, labelWidth);
+    ctx.font = '700 11px system-ui, sans-serif';
+    ctx.fillText(label, p.rx - w / 2 + 21, labelY + 9, labelWidth);
+    ctx.font = '600 9px system-ui, sans-serif';
+    ctx.fillStyle = p.muted ? '#f4c46e' : speaking ? '#8ce7c4' : '#c9d5d1';
+    ctx.fillText(statusText, p.rx - w / 2 + 8, labelY + 23, w - 14);
     ctx.textAlign = 'center';
   }
 

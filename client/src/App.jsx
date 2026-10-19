@@ -124,12 +124,21 @@ export default function App() {
   }, []);
 
   const refreshRoster = useCallback(() => {
-    setRoster([...world.users.values()].map(({ id, name, color, avatarId }) => ({ id, name, color, avatarId })));
+    const session = sessionRef.current;
+    setRoster([...world.users.values()].map(({ id, name, color, avatarId, muted }) => ({
+      id,
+      name,
+      color,
+      avatarId,
+      muted,
+      connection: session?.peers.statusOf(id) ?? 'outside',
+      speaking: Boolean(session?.mixer.levelOf(id) > 0.08),
+    })));
   }, [world]);
 
   const addUser = useCallback((u) => {
     const prev = world.users.get(u.id);
-    world.users.set(u.id, { id: u.id, name: u.name, color: u.color, avatarId: u.avatarId ?? DEFAULT_AVATAR_ID, x: u.x, y: u.y, rx: prev?.rx ?? u.x, ry: prev?.ry ?? u.y });
+    world.users.set(u.id, { id: u.id, name: u.name, color: u.color, avatarId: u.avatarId ?? DEFAULT_AVATAR_ID, muted: u.muted ?? true, x: u.x, y: u.y, rx: prev?.rx ?? u.x, ry: prev?.ry ?? u.y });
   }, [world]);
 
   const teardown = useCallback(() => {
@@ -144,6 +153,7 @@ export default function App() {
     sessionRef.current = null;
     world.users.clear();
     world.connected.clear();
+    world.connectionStatuses.clear();
     setMixer(null);
   }, [world]);
 
@@ -205,6 +215,7 @@ export default function App() {
     world.selfId = selfId;
     world.selfName = displayName;
     world.selfAvatarId = avatarId;
+    world.selfMuted = !stream;
     world.selfColor = colorFor(selfId);
     world.self = savedSession ? { ...savedSession.position } : { ...SPAWN };
 
@@ -212,7 +223,11 @@ export default function App() {
     await m.resume();
     m.setVolume(volume / 100);
     const socket = io({ path: '/api/socket.io', transports: ['websocket', 'polling'] });
-    const peers = new PeerManager({ socket, roomId: ROOM_ID, selfId, stream, mixer: m, onChange: () => { world.connected = new Set(peers.ids().filter((id) => m.peers.has(id))); } });
+    const peers = new PeerManager({ socket, roomId: ROOM_ID, selfId, stream, mixer: m, onChange: () => {
+      world.connected = new Set(peers.ids().filter((id) => m.peers.has(id)));
+      world.connectionStatuses = new Map(peers.statuses);
+      refreshRoster();
+    } });
     peers.onRetry = (id) => { const u = world.users.get(id); if (u && dist(world.self, u) <= hearRadiusRef.current + HEAR_HYSTERESIS) peers.enter(id); };
     const heartbeat = setInterval(() => socket.emit('presence:ping'), 30_000);
     sessionRef.current = { socket, peers, mixer: m, stream, heartbeat };
@@ -230,7 +245,7 @@ export default function App() {
 
     socket.on('connect', () => {
       setNetwork('connected');
-      socket.emit('room:join', { roomId: ROOM_ID, participant: { id: selfId, displayName, avatarId, color: world.selfColor, x: world.self.x, y: world.self.y } });
+      socket.emit('room:join', { roomId: ROOM_ID, participant: { id: selfId, displayName, avatarId, color: world.selfColor, x: world.self.x, y: world.self.y, muted: world.selfMuted } });
     });
     socket.on('disconnect', () => setNetwork('reconnecting'));
     socket.on('connect_error', () => setNetwork('reconnecting'));
@@ -258,6 +273,12 @@ export default function App() {
     });
     socket.on('user:join', (u) => { if (u.id !== selfId) { addUser(u); refreshRoster(); } });
     socket.on('user:leave', ({ id }) => { peers.leave(id); world.users.delete(id); refreshRoster(); });
+    socket.on('voice:status', ({ id, muted }) => {
+      const user = world.users.get(id);
+      if (!user || typeof muted !== 'boolean') return;
+      user.muted = muted;
+      refreshRoster();
+    });
     socket.on('peer:enter', ({ id }) => peers.enter(id));
     socket.on('peer:leave', ({ id }) => peers.leave(id));
     socket.on('rtc:signal', (msg) => peers.handleSignal(msg));
@@ -306,8 +327,9 @@ export default function App() {
       let n = 0;
       for (const u of world.users.values()) if (dist(world.self, u) <= hearRadiusRef.current) n++;
       setNearby(n);
+      refreshRoster();
     }
-  }, [world]);
+  }, [refreshRoster, world]);
 
   const toggleMic = () => {
     const stream = sessionRef.current?.stream;
@@ -315,6 +337,9 @@ export default function App() {
     const next = !micOn;
     stream.getAudioTracks().forEach((t) => { t.enabled = next; });
     setMicOn(next);
+    world.selfMuted = !next;
+    sessionRef.current?.socket.emit('voice:status', { muted: !next });
+    refreshRoster();
   };
   const enableMic = async () => {
     try {
@@ -330,7 +355,9 @@ export default function App() {
       session.peers.stream = stream;
       setHasMic(true);
       setMicOn(true);
+      world.selfMuted = false;
       setError('');
+      session.socket.emit('voice:status', { muted: false });
       for (const id of peerIds) session.peers.enter(id);
     } catch (micError) {
       setError(await microphoneErrorMessage(micError));
@@ -377,6 +404,7 @@ export default function App() {
   const micControlText = !joined ? 'Microphone' : hasMic ? (micOn ? 'Microphone' : 'Microphone muted') : 'Enable microphone';
   const micControlState = !joined ? 'READY' : hasMic ? (micOn ? 'ON' : 'OFF') : 'OFF';
   const roomControlState = !joined ? 'READY' : deafened ? 'OFF' : 'ON';
+  const localVoiceStatus = !hasMic || world.selfMuted ? 'Microphone muted' : 'Microphone on';
 
   return (
     <div className="shell">
@@ -486,8 +514,12 @@ export default function App() {
           <section className="panel">
             <div className="panel-heading"><div><span className="eyebrow">TEAM</span><h3>In the office</h3></div><span className="count-badge">{joined ? roster.length + 1 : 0}</span></div>
             <ul className="people">
-              {joined && <li><span className="dot self-dot" style={{ background: world.selfColor }}><AvatarPreview avatarId={world.selfAvatarId} /></span><span className="person-name">{name}<small>You</small></span><span className="online-dot" /></li>}
-              {roster.map((p) => <li key={p.id}><span className="dot" style={{ background: p.color }}><AvatarPreview avatarId={p.avatarId} /></span><span className="person-name">{p.name}<small>In the office</small></span><span className="online-dot" /></li>)}
+              {joined && <li><span className="dot self-dot" style={{ background: world.selfColor }}><AvatarPreview avatarId={world.selfAvatarId} /></span><span className="person-name">{name}<small>You · {network === 'connected' ? 'Live' : statusText}</small><small className={`voice-status${world.selfMuted ? ' is-muted' : ''}`}>{localVoiceStatus}</small></span><span className="online-dot" /></li>}
+              {roster.map((p) => {
+                const connectionText = { connecting: 'Audio connecting', connected: 'Audio connected', disconnecting: 'Audio disconnecting', outside: 'Outside audio range' }[p.connection] ?? 'Audio unavailable';
+                const voiceText = p.muted ? 'Microphone muted' : p.speaking ? 'Speaking' : 'Microphone on';
+                return <li key={p.id}><span className="dot" style={{ background: p.color }}><AvatarPreview avatarId={p.avatarId} /></span><span className="person-name">{p.name}<small className={`connection-status is-${p.connection}`}>{connectionText}</small><small className={`voice-status${p.muted ? ' is-muted' : p.speaking ? ' is-speaking' : ''}`}>{voiceText}</small></span><span className="online-dot" /></li>;
+              })}
               {!joined && <li className="empty-roster">Join the room to meet your team.</li>}
               {joined && roster.length === 0 && <li className="empty-roster">You’re the first one here. Invite your team!</li>}
             </ul>
