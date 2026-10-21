@@ -81,6 +81,41 @@ const STYLES = `
   .proximity-ring { position: absolute; width: 250px; height: 250px; transform: translate(-50%, -50%); border: 2px dashed rgba(132, 204, 22, 0.6); border-radius: 50%; background: rgba(132, 204, 22, 0.08); pointer-events: none; z-index: 10; transition: background 0.3s ease; }
   .proximity-ring.active { background: rgba(132, 204, 22, 0.15); border: 2px solid rgba(132, 204, 22, 0.8); }
 
+  /* CHAT BUBBLES */
+  .chat-bubble {
+    position: absolute;
+    bottom: calc(100% + 15px);
+    left: 50%;
+    transform: translateX(-50%) translateY(-10px);
+    background: #ffffff;
+    color: #0f172a;
+    padding: 8px 14px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    pointer-events: none;
+    z-index: 40;
+    border: 1px solid rgba(0,0,0,0.05);
+    animation: bubblePop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  }
+  .chat-bubble::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border-width: 6px;
+    border-style: solid;
+    border-color: #ffffff transparent transparent transparent;
+  }
+  
+  @keyframes bubblePop {
+    from { opacity: 0; transform: translateX(-50%) translateY(0) scale(0.8); }
+    to { opacity: 1; transform: translateX(-50%) translateY(-10px) scale(1); }
+  }
+
   /* TOOLBAR */
   .toolbar {
     position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
@@ -162,6 +197,15 @@ export default function App() {
   const streamRef = useRef<MediaStream | null>(null);
   const audioAnimFrameRef = useRef<number>(0);
 
+  // Chat State
+  const [messages, setMessages] = useState<{user: string, text: string}[]>([
+    { user: 'System', text: 'Welcome to ProxiSpeak Central Hub. Walk near others to connect.' }
+  ]);
+  const [chatInput, setChatInput] = useState('');
+  const [localBubble, setLocalBubble] = useState<string | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const bubbleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   const posRef = useRef({ x: 400, y: 300 });
   const keys = useRef<{ [key: string]: boolean }>({});
   const lastUpdateRef = useRef<number>(0);
@@ -184,6 +228,26 @@ export default function App() {
       terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
     }
   }, [serverLogs]);
+
+  // Chat Submit Handler (Creates the Speech Bubble)
+  const handleChatSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatInput.trim()) return;
+    
+    setMessages(prev => [...prev, { user: 'You', text: chatInput }]);
+    
+    // Set Spatial Chat Bubble
+    setLocalBubble(chatInput);
+    if (bubbleTimeoutRef.current) clearTimeout(bubbleTimeoutRef.current);
+    bubbleTimeoutRef.current = setTimeout(() => setLocalBubble(null), 5000); // Bubble disappears after 5s
+    
+    addLog(`Colyseus Broadcast: Text message sent.`);
+    setChatInput('');
+  };
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   // Web Audio API Setup
   const startMicrophone = async () => {
@@ -237,11 +301,8 @@ export default function App() {
   };
 
   const toggleMic = () => {
-    if (micActive) {
-      stopMicrophone();
-    } else {
-      startMicrophone();
-    }
+    if (micActive) stopMicrophone();
+    else startMicrophone();
   };
 
   useEffect(() => {
@@ -407,8 +468,6 @@ export default function App() {
   };
 
   const connectedPeers = otherUsers.filter(u => isWithinEarshot(u.x, u.y));
-
-  // Avatar glow scales with microphone volume input
   const avatarGlow = micVolume > 5 ? `0 0 ${Math.min(micVolume, 30)}px rgba(132, 204, 22, 0.8)` : '0 4px 10px rgba(0,0,0,0.15)';
 
   return (
@@ -536,9 +595,17 @@ export default function App() {
 
               {/* Main Canvas Area */}
               <div className="map-canvas">
-                 <div className="controls-hint">
-                    Use <span className="key-btn">W</span><span className="key-btn">A</span><span className="key-btn">S</span><span className="key-btn">D</span> to move
-                 </div>
+                 
+                 {/* Chat Form Overlay */}
+                 <form className="controls-hint" style={{ padding: 0 }} onSubmit={handleChatSubmit}>
+                    <input 
+                      type="text" 
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      placeholder="Press Enter to Chat..." 
+                      style={{ padding: '8px 12px', border: 'none', background: 'transparent', outline: 'none', fontSize: '12px', fontWeight: 'bold' }} 
+                    />
+                 </form>
                  
                  {/* Player Proximity Ring */}
                  <div className={`proximity-ring ${connectedPeers.length > 0 ? 'active' : ''}`} style={{ left: playerPos.x, top: playerPos.y }}></div>
@@ -548,7 +615,6 @@ export default function App() {
                    const inEarshot = isWithinEarshot(user.x, user.y);
                    const volume = getVolume(user.x, user.y);
                    
-                   // Dynamic simulated log for connection
                    if (inEarshot && Math.random() < 0.05) {
                       addLog(`WebRTC DataChannel: Streaming from ${user.name}`);
                    }
@@ -570,6 +636,11 @@ export default function App() {
 
                  {/* The Local Player Avatar */}
                  <div className="sprite" style={{ left: playerPos.x, top: playerPos.y, zIndex: 30 }}>
+                    {localBubble && (
+                      <div className="chat-bubble">
+                        {localBubble}
+                      </div>
+                    )}
                     <img 
                       src="https://api.dicebear.com/9.x/avataaars/svg?seed=You" 
                       alt="You" 
@@ -607,7 +678,6 @@ export default function App() {
           </div>
 
           <div className="contact-grid">
-            {/* Contact Form */}
             <div className="contact-card fade-up-reveal" data-delay="0.2">
               <h3 className="heading-font">Send a Message</h3>
               <form className="contact-form" onSubmit={(e) => { e.preventDefault(); alert('Message sent!'); }}>
@@ -618,7 +688,6 @@ export default function App() {
               </form>
             </div>
 
-            {/* More / Links */}
             <div className="contact-card fade-up-reveal" data-delay="0.3">
               <h3 className="heading-font">Explore More</h3>
               <div className="contact-links">
