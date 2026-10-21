@@ -43,7 +43,7 @@ const STYLES = `
   .avatar-panel { width: 100%; max-width: 800px; background: rgba(255, 255, 255, 0.9); border: 1px solid rgba(255, 255, 255, 0.6); border-radius: 24px; padding: 40px; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.1); }
   .panel-col { display: flex; flex-direction: column; gap: 20px; }
   .panel-title { font-size: 18px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 10px; border-bottom: 1px solid var(--card-border); padding-bottom: 10px; font-weight: 800; }
-  .upload-box { border: 2px dashed rgba(0,0,0,0.15); border-radius: 16px; height: 150px; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; transition: all 0.2s; color: var(--muted); font-size: 14px; background: rgba(0,0,0,0.02); font-weight: 500; }
+  .upload-box { position: relative; border: 2px dashed rgba(0,0,0,0.15); border-radius: 16px; height: 150px; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; transition: all 0.2s; color: var(--muted); font-size: 14px; background: rgba(0,0,0,0.02); font-weight: 500; overflow: hidden; }
   .upload-box:hover { border-color: var(--accent); color: var(--cream); background: rgba(0, 0, 0, 0.05); }
   .text-input { width: 100%; background: #ffffff; border: 1px solid rgba(0,0,0,0.15); border-radius: 8px; padding: 12px; color: var(--cream); font-family: inherit; font-size: 14px; outline: none; transition: border-color 0.2s; font-weight: 500; }
   .text-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.1); }
@@ -184,10 +184,12 @@ export default function App() {
   const workspaceSectionRef = useRef<HTMLElement>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
   const contactSectionRef = useRef<HTMLElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [selectedMap, setSelectedMap] = useState<number>(1);
   const [playerPos, setPlayerPos] = useState({ x: 400, y: 300 });
   const [serverLogs, setServerLogs] = useState<string[]>([]);
+  const [uploadedAvatar, setUploadedAvatar] = useState<string | null>(null);
   
   // Audio State
   const [micActive, setMicActive] = useState(false);
@@ -229,17 +231,31 @@ export default function App() {
     }
   }, [serverLogs]);
 
-  // Chat Submit Handler (Creates the Speech Bubble)
+  // Handle Avatar Upload
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setUploadedAvatar(event.target.result as string);
+          addLog("Avatar image uploaded successfully.");
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Chat Submit Handler
   const handleChatSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!chatInput.trim()) return;
     
     setMessages(prev => [...prev, { user: 'You', text: chatInput }]);
     
-    // Set Spatial Chat Bubble
     setLocalBubble(chatInput);
     if (bubbleTimeoutRef.current) clearTimeout(bubbleTimeoutRef.current);
-    bubbleTimeoutRef.current = setTimeout(() => setLocalBubble(null), 5000); // Bubble disappears after 5s
+    bubbleTimeoutRef.current = setTimeout(() => setLocalBubble(null), 5000); 
     
     addLog(`Colyseus Broadcast: Text message sent.`);
     setChatInput('');
@@ -301,8 +317,11 @@ export default function App() {
   };
 
   const toggleMic = () => {
-    if (micActive) stopMicrophone();
-    else startMicrophone();
+    if (micActive) {
+      stopMicrophone();
+    } else {
+      startMicrophone();
+    }
   };
 
   useEffect(() => {
@@ -518,9 +537,16 @@ export default function App() {
             <div className="avatar-panel fade-up-reveal" data-delay="0.1">
                 <div className="panel-col">
                   <h3 className="panel-title heading-font">1. Create Avatar</h3>
-                  <div className="upload-box">
-                      <span style={{ fontSize: '24px', marginBottom: '8px' }}>📷</span>
-                      <p>Drag & Drop Photo</p>
+                  <div className="upload-box" onClick={() => fileInputRef.current?.click()}>
+                      {uploadedAvatar ? (
+                        <img src={uploadedAvatar} alt="Uploaded" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '14px' }} />
+                      ) : (
+                        <>
+                          <span style={{ fontSize: '24px', marginBottom: '8px' }}>📷</span>
+                          <p>Click to Upload Photo</p>
+                        </>
+                      )}
+                      <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="image/*" style={{ display: 'none' }} />
                   </div>
                   <textarea className="text-input" rows={3} placeholder="Or describe your avatar (e.g. Cyberpunk engineer with neon jacket...)"></textarea>
                 </div>
@@ -642,7 +668,7 @@ export default function App() {
                       </div>
                     )}
                     <img 
-                      src="https://api.dicebear.com/9.x/avataaars/svg?seed=You" 
+                      src={uploadedAvatar || "https://api.dicebear.com/9.x/avataaars/svg?seed=You"} 
                       alt="You" 
                       className="sprite-img" 
                       style={{ 
