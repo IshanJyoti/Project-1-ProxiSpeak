@@ -64,11 +64,15 @@ const STYLES = `
   /* WORKSPACE / SIMULATION */
   .workspace-section { width: 100%; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background-color: #cbd5e1; padding: 60px 20px; }
   .workspace-layout { display: flex; gap: 24px; width: 100%; max-width: 1200px; height: 600px; }
+  
+  /* Backend Engine Terminal */
   .server-panel { width: 320px; background: var(--log-bg); border-radius: 20px; padding: 20px; display: flex; flex-direction: column; box-shadow: 0 20px 40px rgba(0,0,0,0.2); overflow: hidden; border: 1px solid rgba(255,255,255,0.1); }
   .log-terminal { flex: 1; background: #0f172a; border-radius: 12px; padding: 12px; margin-top: 15px; font-family: monospace; font-size: 11px; color: var(--log-text); overflow-y: auto; box-shadow: inset 0 4px 12px rgba(0,0,0,0.5); }
   .log-entry { margin-bottom: 8px; line-height: 1.4; opacity: 0.9; }
   .log-time { color: #94a3b8; margin-right: 8px; }
+  
   .map-canvas { flex: 1; background: #e2e8f0; border-radius: 20px; position: relative; overflow: hidden; background-image: linear-gradient(rgba(0,0,0,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.05) 1px, transparent 1px); background-size: 40px 40px; border: 4px solid var(--accent); box-shadow: inset 0 0 20px rgba(0,0,0,0.05), 0 20px 40px rgba(0,0,0,0.1); }
+  
   .controls-hint { position: absolute; top: 16px; left: 16px; background: rgba(255,255,255,0.9); padding: 8px 12px; border-radius: 8px; font-size: 11px; font-weight: 700; color: var(--accent); z-index: 10; display: flex; align-items: center; gap: 8px; border: 1px solid rgba(0,0,0,0.1); }
   .key-btn { background: #fff; border: 1px solid #ccc; padding: 2px 6px; border-radius: 4px; box-shadow: 0 2px 0 #ccc; }
   
@@ -100,21 +104,92 @@ const STYLES = `
     border: 1px solid rgba(0,0,0,0.05);
     animation: bubblePop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
   }
-  .chat-bubble::after {
-    content: '';
-    position: absolute;
-    top: 100%;
-    left: 50%;
-    transform: translateX(-50%);
-    border-width: 6px;
-    border-style: solid;
-    border-color: #ffffff transparent transparent transparent;
-  }
+  .chat-bubble::after { content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border-width: 6px; border-style: solid; border-color: #ffffff transparent transparent transparent; }
   
   @keyframes bubblePop {
     from { opacity: 0; transform: translateX(-50%) translateY(0) scale(0.8); }
     to { opacity: 1; transform: translateX(-50%) translateY(-10px) scale(1); }
   }
+
+  /* PERSISTENT CHAT HISTORY PANEL */
+  .chat-panel {
+    position: absolute;
+    bottom: 90px;
+    left: 20px;
+    width: 320px;
+    height: 380px;
+    background: rgba(15, 23, 42, 0.9);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 16px;
+    display: flex;
+    flex-direction: column;
+    z-index: 50;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+    overflow: hidden;
+    animation: fadeUp 0.3s ease;
+  }
+  .chat-panel-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    font-weight: 700;
+    color: var(--lime);
+    font-size: 13px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .chat-history {
+    flex: 1;
+    padding: 16px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .chat-msg-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .chat-msg-meta {
+    font-size: 10px;
+    color: #94a3b8;
+    display: flex;
+    gap: 6px;
+  }
+  .chat-msg-user { font-weight: 700; color: #38bdf8; }
+  .chat-msg-user.self { color: var(--lime); }
+  .chat-msg-text {
+    background: rgba(255,255,255,0.05);
+    padding: 8px 12px;
+    border-radius: 8px;
+    border-top-left-radius: 0;
+    color: #f8fafc;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .chat-msg-item.self .chat-msg-text {
+    background: rgba(132, 204, 22, 0.1);
+    border: 1px solid rgba(132, 204, 22, 0.2);
+  }
+  .chat-input-wrapper {
+    padding: 12px;
+    background: rgba(0,0,0,0.2);
+    border-top: 1px solid rgba(255,255,255,0.1);
+  }
+  .chat-input-field {
+    width: 100%;
+    background: rgba(0,0,0,0.4);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    padding: 10px 12px;
+    color: #fff;
+    font-size: 12px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .chat-input-field:focus { border-color: var(--lime); }
 
   /* TOOLBAR */
   .toolbar {
@@ -177,6 +252,14 @@ const STYLES = `
   }
 `;
 
+interface ChatMessage {
+  id: string;
+  user: string;
+  text: string;
+  time: string;
+  isSelf?: boolean;
+}
+
 export default function App() {
   const revealImgRef = useRef<HTMLDivElement>(null);
   const avatarSectionRef = useRef<HTMLElement>(null);
@@ -199,9 +282,10 @@ export default function App() {
   const streamRef = useRef<MediaStream | null>(null);
   const audioAnimFrameRef = useRef<number>(0);
 
-  // Chat State
-  const [messages, setMessages] = useState<{user: string, text: string}[]>([
-    { user: 'System', text: 'Welcome to ProxiSpeak Central Hub. Walk near others to connect.' }
+  // Persistent Chat State
+  const [isChatOpen, setIsChatOpen] = useState(true);
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    { id: 'msg-1', user: 'System', text: 'Welcome to ProxiSpeak Central Hub. Walk near others to connect.', time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
   ]);
   const [chatInput, setChatInput] = useState('');
   const [localBubble, setLocalBubble] = useState<string | null>(null);
@@ -246,13 +330,23 @@ export default function App() {
     }
   };
 
-  // Chat Submit Handler
+  // Chat Submit Handler (Creates Speech Bubble & History Entry)
   const handleChatSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!chatInput.trim()) return;
     
-    setMessages(prev => [...prev, { user: 'You', text: chatInput }]);
+    const timeString = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const newMsg: ChatMessage = {
+      id: `msg-${Date.now()}`,
+      user: 'You',
+      text: chatInput,
+      time: timeString,
+      isSelf: true
+    };
+
+    setMessages(prev => [...prev, newMsg]);
     
+    // Set Spatial Chat Bubble
     setLocalBubble(chatInput);
     if (bubbleTimeoutRef.current) clearTimeout(bubbleTimeoutRef.current);
     bubbleTimeoutRef.current = setTimeout(() => setLocalBubble(null), 5000); 
@@ -261,9 +355,12 @@ export default function App() {
     setChatInput('');
   };
 
+  // Auto-scroll chat history
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    if (isChatOpen && messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, isChatOpen]);
 
   // Web Audio API Setup
   const startMicrophone = async () => {
@@ -621,17 +718,42 @@ export default function App() {
 
               {/* Main Canvas Area */}
               <div className="map-canvas">
-                 
-                 {/* Chat Form Overlay */}
-                 <form className="controls-hint" style={{ padding: 0 }} onSubmit={handleChatSubmit}>
-                    <input 
-                      type="text" 
-                      value={chatInput}
-                      onChange={(e) => setChatInput(e.target.value)}
-                      placeholder="Press Enter to Chat..." 
-                      style={{ padding: '8px 12px', border: 'none', background: 'transparent', outline: 'none', fontSize: '12px', fontWeight: 'bold' }} 
-                    />
-                 </form>
+                 <div className="controls-hint">
+                    Use <span className="key-btn">W</span><span className="key-btn">A</span><span className="key-btn">S</span><span className="key-btn">D</span> to move
+                 </div>
+
+                 {/* Persistent Chat History Panel */}
+                 {isChatOpen && (
+                   <div className="chat-panel">
+                     <div className="chat-panel-header">
+                       <span>Room Chat</span>
+                       <button onClick={() => setIsChatOpen(false)} style={{ background: 'transparent', color: '#94a3b8', fontSize: '16px', cursor: 'pointer' }}>&times;</button>
+                     </div>
+                     <div className="chat-history">
+                       {messages.map((msg) => (
+                         <div key={msg.id} className={`chat-msg-item ${msg.isSelf ? 'self' : ''}`}>
+                           <div className="chat-msg-meta">
+                             <span className={`chat-msg-user ${msg.isSelf ? 'self' : ''}`}>{msg.user}</span>
+                             <span>{msg.time}</span>
+                           </div>
+                           <div className="chat-msg-text">
+                             {msg.text}
+                           </div>
+                         </div>
+                       ))}
+                       <div ref={messagesEndRef} />
+                     </div>
+                     <form className="chat-input-wrapper" onSubmit={handleChatSubmit}>
+                        <input 
+                          type="text" 
+                          className="chat-input-field" 
+                          value={chatInput}
+                          onChange={(e) => setChatInput(e.target.value)}
+                          placeholder="Type a message..." 
+                        />
+                     </form>
+                   </div>
+                 )}
                  
                  {/* Player Proximity Ring */}
                  <div className={`proximity-ring ${connectedPeers.length > 0 ? 'active' : ''}`} style={{ left: playerPos.x, top: playerPos.y }}></div>
@@ -689,7 +811,9 @@ export default function App() {
                      {micActive ? '🎤' : '🔇'}
                    </button>
                    <button className="tool-btn" title="Camera (Disabled in Demo)">📹</button>
-                   <button className="tool-btn" title="Screen Share (Disabled in Demo)">💻</button>
+                   <button className={`tool-btn ${isChatOpen ? 'active' : ''}`} onClick={() => setIsChatOpen(!isChatOpen)} title="Toggle Chat">
+                     💬
+                   </button>
                    <button className="tool-btn" title="Contact Us" onClick={scrollToContact}>✉️</button>
                  </div>
               </div>
