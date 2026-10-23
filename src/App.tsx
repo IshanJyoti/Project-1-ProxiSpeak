@@ -44,12 +44,15 @@ const STYLES = `
   .panel-col { display: flex; flex-direction: column; gap: 20px; }
   .panel-title { font-size: 18px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 10px; border-bottom: 1px solid var(--card-border); padding-bottom: 10px; font-weight: 800; }
   .upload-box { position: relative; border: 2px dashed rgba(0,0,0,0.15); border-radius: 16px; height: 150px; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; transition: all 0.2s; color: var(--muted); font-size: 14px; background: rgba(0,0,0,0.02); font-weight: 500; overflow: hidden; }
+  .upload-box.active { border-color: var(--lime); box-shadow: 0 4px 12px rgba(132, 204, 22, 0.2); }
   .upload-box:hover { border-color: var(--accent); color: var(--cream); background: rgba(0, 0, 0, 0.05); }
   .text-input { width: 100%; background: #ffffff; border: 1px solid rgba(0,0,0,0.15); border-radius: 8px; padding: 12px; color: var(--cream); font-family: inherit; font-size: 14px; outline: none; transition: border-color 0.2s; font-weight: 500; }
   .text-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.1); }
   .avatar-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
   .avatar-circle { aspect-ratio: 1; border-radius: 50%; background: #e2e8f0; border: 2px solid transparent; cursor: pointer; transition: all 0.2s; display: flex; justify-content: center; align-items: center; overflow: hidden; }
-  .avatar-circle.selected { border-color: var(--accent); box-shadow: 0 4px 12px rgba(0,0,0,0.1); background: #94a3b8; }
+  .avatar-circle img { width: 100%; height: 100%; object-fit: cover; }
+  .avatar-circle:hover { transform: scale(1.05); }
+  .avatar-circle.selected { border-color: var(--lime); box-shadow: 0 4px 12px rgba(132, 204, 22, 0.3); background: #94a3b8; transform: scale(1.05); }
   .action-btn { width: 100%; background: var(--accent); color: #ffffff; border: none; padding: 14px; border-radius: 8px; font-weight: 600; font-family: 'Orbitron', sans-serif; text-transform: uppercase; margin-top: 20px; transition: opacity 0.2s, transform 0.2s; cursor: pointer; }
 
   /* MAP SELECTION */
@@ -65,15 +68,18 @@ const STYLES = `
   .workspace-section { width: 100%; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background-color: #cbd5e1; padding: 60px 20px; }
   .workspace-layout { display: flex; gap: 24px; width: 100%; max-width: 1200px; height: 600px; }
   
-  /* Backend Engine Terminal */
   .server-panel { width: 320px; background: var(--log-bg); border-radius: 20px; padding: 20px; display: flex; flex-direction: column; box-shadow: 0 20px 40px rgba(0,0,0,0.2); overflow: hidden; border: 1px solid rgba(255,255,255,0.1); }
   .log-terminal { flex: 1; background: #0f172a; border-radius: 12px; padding: 12px; margin-top: 15px; font-family: monospace; font-size: 11px; color: var(--log-text); overflow-y: auto; box-shadow: inset 0 4px 12px rgba(0,0,0,0.5); }
   .log-entry { margin-bottom: 8px; line-height: 1.4; opacity: 0.9; }
   .log-time { color: #94a3b8; margin-right: 8px; }
   
-  .map-canvas { flex: 1; background: #e2e8f0; border-radius: 20px; position: relative; overflow: hidden; background-image: linear-gradient(rgba(0,0,0,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.05) 1px, transparent 1px); background-size: 40px 40px; border: 4px solid var(--accent); box-shadow: inset 0 0 20px rgba(0,0,0,0.05), 0 20px 40px rgba(0,0,0,0.1); }
+  .map-canvas { 
+    flex: 1; background: #e2e8f0; border-radius: 20px; position: relative; overflow: hidden; 
+    background-image: linear-gradient(rgba(0,0,0,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.05) 1px, transparent 1px); 
+    background-size: 40px 40px; border: 4px solid var(--accent); box-shadow: inset 0 0 20px rgba(0,0,0,0.05), 0 20px 40px rgba(0,0,0,0.1); 
+  }
   
-  .controls-hint { position: absolute; top: 16px; left: 16px; background: rgba(255,255,255,0.9); padding: 8px 12px; border-radius: 8px; font-size: 11px; font-weight: 700; color: var(--accent); z-index: 10; display: flex; align-items: center; gap: 8px; border: 1px solid rgba(0,0,0,0.1); }
+  .controls-hint { position: absolute; top: 16px; left: 16px; background: rgba(255,255,255,0.9); padding: 8px 12px; border-radius: 8px; font-size: 11px; font-weight: 700; color: var(--accent); z-index: 10; display: flex; align-items: center; gap: 8px; border: 1px solid rgba(0,0,0,0.1); backdrop-filter: blur(4px); }
   .key-btn { background: #fff; border: 1px solid #ccc; padding: 2px 6px; border-radius: 4px; box-shadow: 0 2px 0 #ccc; }
   
   .sprite { position: absolute; width: 44px; height: 44px; transform: translate(-50%, -50%); z-index: 20; }
@@ -84,6 +90,27 @@ const STYLES = `
 
   .proximity-ring { position: absolute; width: 250px; height: 250px; transform: translate(-50%, -50%); border: 2px dashed rgba(132, 204, 22, 0.6); border-radius: 50%; background: rgba(132, 204, 22, 0.08); pointer-events: none; z-index: 10; transition: background 0.3s ease; }
   .proximity-ring.active { background: rgba(132, 204, 22, 0.15); border: 2px solid rgba(132, 204, 22, 0.8); }
+
+  /* FLOATING VIDEO OVERLAY (Inside map) */
+  .video-container-overlay {
+    position: absolute; top: 20px; right: 20px;
+    display: flex; flex-direction: row; gap: 15px; z-index: 45; pointer-events: none;
+    max-width: 60%; flex-wrap: wrap; justify-content: flex-end;
+  }
+  .video-card {
+    width: 200px; aspect-ratio: 4/3; background: rgba(15, 23, 42, 0.85); border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.2); overflow: hidden; position: relative;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3); display: flex; justify-content: center; align-items: center;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    backdrop-filter: blur(8px);
+  }
+  .video-card.local { border: 2px solid var(--lime); }
+  .video-card img { width: 100%; height: 100%; object-fit: cover; opacity: 0.8; }
+  .video-label {
+    position: absolute; bottom: 8px; left: 8px; background: rgba(0,0,0,0.7); color: #fff;
+    padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; display: flex; align-items: center; gap: 6px; backdrop-filter: blur(4px);
+  }
+  .logo-dot { width: 8px; height: 8px; background: var(--lime); border-radius: 50%; box-shadow: 0 0 8px var(--lime); }
 
   /* CHAT BUBBLES */
   .chat-bubble {
@@ -260,6 +287,9 @@ interface ChatMessage {
   isSelf?: boolean;
 }
 
+// Preset Seeds for generated Avatars
+const PRESET_SEEDS = ["Felix", "Aneka", "Jocelyn", "Sam", "Ryan", "Jack"];
+
 export default function App() {
   const revealImgRef = useRef<HTMLDivElement>(null);
   const avatarSectionRef = useRef<HTMLElement>(null);
@@ -269,10 +299,15 @@ export default function App() {
   const contactSectionRef = useRef<HTMLElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
+  // App Setup States
+  const [playerName, setPlayerName] = useState<string>('You');
   const [selectedMap, setSelectedMap] = useState<number>(1);
+  const [selectedPresetIndex, setSelectedPresetIndex] = useState<number>(0);
+  const [uploadedAvatar, setUploadedAvatar] = useState<string | null>(null);
+
+  // Engine States
   const [playerPos, setPlayerPos] = useState({ x: 400, y: 300 });
   const [serverLogs, setServerLogs] = useState<string[]>([]);
-  const [uploadedAvatar, setUploadedAvatar] = useState<string | null>(null);
   
   // Audio State
   const [micActive, setMicActive] = useState(false);
@@ -295,6 +330,16 @@ export default function App() {
   const posRef = useRef({ x: 400, y: 300 });
   const keys = useRef<{ [key: string]: boolean }>({});
   const lastUpdateRef = useRef<number>(0);
+
+  // Data Map featuring distinct backgrounds for each room
+  const mapData = [
+    { id: 1, name: "Central Hub", bg: "https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1200&q=80", desc: "Main collaboration area. High traffic.", tag: "50+ Online", count: 52 },
+    { id: 2, name: "Breakroom", bg: "https://images.unsplash.com/photo-1527192491265-7e15c55b1ed2?auto=format&fit=crop&w=1200&q=80", desc: "Casual proximity chat.", tag: "12 Online", count: 12 },
+    { id: 3, name: "Meeting Rooms", bg: "https://images.unsplash.com/photo-1505409859467-3a796fd579f9?auto=format&fit=crop&w=1200&q=80", desc: "Private enclaves with hard cut-offs.", tag: "4 Active", count: 4 },
+    { id: 4, name: "Deep Work Zone", bg: "https://images.unsplash.com/photo-1524758631624-e2822e304c36?auto=format&fit=crop&w=1200&q=80", desc: "Muted zones. Audio strictly 2m.", tag: "Quiet", count: 8 }
+  ];
+
+  const activeMapData = mapData.find(m => m.id === selectedMap) || mapData[0];
 
   const scrollToAvatar = () => avatarSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
   const scrollToMap = () => mapSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -338,7 +383,7 @@ export default function App() {
     const timeString = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const newMsg: ChatMessage = {
       id: `msg-${Date.now()}`,
-      user: 'You',
+      user: playerName || 'You',
       text: chatInput,
       time: timeString,
       isSelf: true
@@ -554,22 +599,15 @@ export default function App() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
       cancelAnimationFrame(animationFrameId);
-      stopMicrophone(); // Clean up audio on unmount
+      stopMicrophone(); 
     };
   }, []);
 
-  const mapData = [
-    { id: 1, name: "Central Hub", desc: "Main collaboration area. High traffic.", tag: "50+ Online", count: 52 },
-    { id: 2, name: "Breakroom", desc: "Casual proximity chat.", tag: "12 Online", count: 12 },
-    { id: 3, name: "Meeting Rooms", desc: "Private enclaves with hard cut-offs.", tag: "4 Active", count: 4 },
-    { id: 4, name: "Deep Work Zone", desc: "Muted zones. Audio strictly 2m.", tag: "Quiet", count: 8 }
-  ];
-
   const otherUsers = [
-    { id: 1, name: "Sarah", x: 450, y: 150, avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=Sarah" },
-    { id: 2, name: "Dev_Jack", x: 200, y: 380, avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=Jack" },
-    { id: 3, name: "Alek", x: 650, y: 320, avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=Alek" },
-    { id: 4, name: "Mia", x: 250, y: 100, avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=Mia" }
+    { id: 1, name: "Sarah", x: 450, y: 150, avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=Sarah", photo: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80" },
+    { id: 2, name: "Dev_Jack", x: 200, y: 380, avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=Jack", photo: "https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&w=150&q=80" },
+    { id: 3, name: "Alek", x: 650, y: 320, avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=Alek", photo: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80" },
+    { id: 4, name: "Mia", x: 250, y: 100, avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=Mia", photo: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=150&q=80" }
   ];
 
   const PROXIMITY_RADIUS = 125;
@@ -584,7 +622,11 @@ export default function App() {
   };
 
   const connectedPeers = otherUsers.filter(u => isWithinEarshot(u.x, u.y));
+  
   const avatarGlow = micVolume > 5 ? `0 0 ${Math.min(micVolume, 30)}px rgba(132, 204, 22, 0.8)` : '0 4px 10px rgba(0,0,0,0.15)';
+  
+  // Render determination for Local Avatar
+  const localAvatarImageSrc = uploadedAvatar || `https://api.dicebear.com/9.x/avataaars/svg?seed=${PRESET_SEEDS[selectedPresetIndex]}`;
 
   return (
     <>
@@ -634,7 +676,7 @@ export default function App() {
             <div className="avatar-panel fade-up-reveal" data-delay="0.1">
                 <div className="panel-col">
                   <h3 className="panel-title heading-font">1. Create Avatar</h3>
-                  <div className="upload-box" onClick={() => fileInputRef.current?.click()}>
+                  <div className={`upload-box ${uploadedAvatar ? 'active' : ''}`} onClick={() => fileInputRef.current?.click()}>
                       {uploadedAvatar ? (
                         <img src={uploadedAvatar} alt="Uploaded" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '14px' }} />
                       ) : (
@@ -650,14 +692,28 @@ export default function App() {
                 <div className="panel-col">
                   <h3 className="panel-title heading-font">2. Select Preset</h3>
                   <div className="avatar-grid">
-                      {[1, 2, 3, 4, 5, 6].map((i) => (
-                        <div key={i} className={`avatar-circle ${i === 1 ? 'selected' : ''}`}>
-                            <span style={{ color: 'var(--label)', fontWeight: 'bold' }}>{i}</span>
+                      {PRESET_SEEDS.map((seed, i) => (
+                        <div 
+                          key={i} 
+                          className={`avatar-circle ${i === selectedPresetIndex && !uploadedAvatar ? 'selected' : ''}`}
+                          onClick={() => {
+                            setSelectedPresetIndex(i);
+                            setUploadedAvatar(null); 
+                          }}
+                        >
+                            <img src={`https://api.dicebear.com/9.x/avataaars/svg?seed=${seed}`} alt={`Preset ${i}`} />
                         </div>
                       ))}
                   </div>
                   <div style={{ marginTop: 'auto' }}>
-                      <input type="text" className="text-input" placeholder="Enter Display Name" style={{ marginBottom: '15px' }} />
+                      <input 
+                        type="text" 
+                        className="text-input" 
+                        value={playerName}
+                        onChange={(e) => setPlayerName(e.target.value)}
+                        placeholder="Enter Display Name" 
+                        style={{ marginBottom: '15px' }} 
+                      />
                       <button className="action-btn" onClick={scrollToMap}>Next: Select Map</button>
                   </div>
                 </div>
@@ -674,7 +730,9 @@ export default function App() {
                 {mapData.map((map) => (
                   <div key={map.id} className={`map-card ${selectedMap === map.id ? 'active' : ''}`} onClick={() => setSelectedMap(map.id)}>
                     <div className="map-img" style={{
-                      backgroundImage: `url('https://images.higgs.ai/?default=1&output=webp&url=https%3A%2F%2Fd8j0ntlcm91z4.cloudfront.net%2Fuser_38xzZboKViGWJOttwIXH07lWA1P%2Fhf_20260831_123709_183f0065-efb2-4bb2-a849-13aaa5af2f3f.png&w=1920&q=85')`, 
+                      backgroundColor: '#cbd5e1',
+                      backgroundImage: map.bg ? `url('${map.bg}')` : 'none', 
+                      backgroundSize: 'cover',
                       filter: selectedMap === map.id ? 'grayscale(0%)' : 'grayscale(100%)',
                       transition: 'filter 0.3s ease'
                     }}>
@@ -717,7 +775,16 @@ export default function App() {
               </div>
 
               {/* Main Canvas Area */}
-              <div className="map-canvas">
+              <div className="map-canvas" style={{
+                  backgroundImage: `
+                    linear-gradient(rgba(0,0,0,0.05) 1px, transparent 1px), 
+                    linear-gradient(90deg, rgba(0,0,0,0.05) 1px, transparent 1px),
+                    linear-gradient(rgba(255,255,255,0.85), rgba(255,255,255,0.85)),
+                    url('${activeMapData.bg}')
+                  `,
+                  backgroundSize: '40px 40px, 40px 40px, cover, cover',
+                  backgroundPosition: '0 0, 0 0, center, center'
+              }}>
                  <div className="controls-hint">
                     Use <span className="key-btn">W</span><span className="key-btn">A</span><span className="key-btn">S</span><span className="key-btn">D</span> to move
                  </div>
@@ -758,7 +825,31 @@ export default function App() {
                  {/* Player Proximity Ring */}
                  <div className={`proximity-ring ${connectedPeers.length > 0 ? 'active' : ''}`} style={{ left: playerPos.x, top: playerPos.y }}></div>
 
-                 {/* Other Users */}
+                 {/* Floating Video Cards Inside Canvas */}
+                 <div className="video-container-overlay">
+                    {/* Local Video Card */}
+                    <div className="video-card local" style={{ boxShadow: avatarGlow }}>
+                      <img src={localAvatarImageSrc} alt="Local Video" />
+                      <div className="video-label">
+                        <span className="logo-dot"></span> {playerName || 'You'} {micActive ? '' : '(Muted)'}
+                      </div>
+                      {micActive && (
+                         <div style={{ position: 'absolute', bottom: 0, left: 0, height: '4px', background: 'var(--lime)', width: `${(micVolume / 128) * 100}%`, transition: 'width 0.1s linear' }}></div>
+                      )}
+                    </div>
+
+                    {/* Connected Peers Video Cards */}
+                    {connectedPeers.map(peer => (
+                      <div key={peer.id} className="video-card" style={{ animation: 'fadeUp 0.3s ease' }}>
+                        <img src={peer.photo} alt={peer.name} />
+                        <div className="video-label">
+                          <span className="logo-dot" style={{ background: '#3b82f6', boxShadow: 'none' }}></span> {peer.name}
+                        </div>
+                      </div>
+                    ))}
+                 </div>
+
+                 {/* Other Users Sprites */}
                  {otherUsers.map(user => {
                    const inEarshot = isWithinEarshot(user.x, user.y);
                    const volume = getVolume(user.x, user.y);
@@ -782,7 +873,7 @@ export default function App() {
                    );
                  })}
 
-                 {/* The Local Player Avatar */}
+                 {/* The Local Player Avatar Sprite */}
                  <div className="sprite" style={{ left: playerPos.x, top: playerPos.y, zIndex: 30 }}>
                     {localBubble && (
                       <div className="chat-bubble">
@@ -790,7 +881,7 @@ export default function App() {
                       </div>
                     )}
                     <img 
-                      src={uploadedAvatar || "https://api.dicebear.com/9.x/avataaars/svg?seed=You"} 
+                      src={localAvatarImageSrc} 
                       alt="You" 
                       className="sprite-img" 
                       style={{ 
@@ -801,7 +892,7 @@ export default function App() {
                       }} 
                     />
                     <div className="sprite-name" style={{ background: 'var(--accent)' }}>
-                       <span>You {micActive && '🎙️'}</span>
+                       <span>{playerName || 'You'} {micActive && '🎙️'}</span>
                     </div>
                  </div>
 
@@ -817,6 +908,7 @@ export default function App() {
                    <button className="tool-btn" title="Contact Us" onClick={scrollToContact}>✉️</button>
                  </div>
               </div>
+
            </div>
         </section>
 
