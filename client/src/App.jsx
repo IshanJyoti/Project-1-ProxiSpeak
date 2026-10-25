@@ -104,6 +104,7 @@ export default function App() {
   const [rangeError, setRangeError] = useState('');
   const [needsAdminToken, setNeedsAdminToken] = useState(false);
   const [adminToken, setAdminToken] = useState('');
+  const [dark, setDark] = useState(() => localStorage.getItem('proxispeak-theme') === 'dark');
   hearRadiusRef.current = hearRadius;
 
   useEffect(() => {
@@ -158,6 +159,11 @@ export default function App() {
   }, [world]);
 
   useEffect(() => teardown, [teardown]);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    localStorage.setItem('proxispeak-theme', dark ? 'dark' : 'light');
+  }, [dark]);
 
   useEffect(() => {
     const savePosition = () => {
@@ -414,6 +420,9 @@ export default function App() {
           <div><h1>proxi<span>speak</span></h1><small>THE SPATIAL OFFICE</small></div>
         </div>
         <div className="topbar-right">
+          <button className="theme-toggle" onClick={() => setDark((d) => !d)} aria-pressed={dark} aria-label="Toggle dark mode" title={dark ? 'Switch to light mode' : 'Switch to dark mode'}>
+            {dark ? '☀' : '☾'}
+          </button>
           <div className="room-chip"><span className="room-dot" />MAIN OFFICE</div>
           <div className="status"><i className={`led ${network}`} />{statusText}{joined && <span className="fps">{fps} FPS</span>}</div>
         </div>
