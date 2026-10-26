@@ -11,6 +11,7 @@ import { AVATAR_CHOICES, AVATAR_IDS, DEFAULT_AVATAR_ID, avatarById } from '../..
 const ROOM_ID = 'main-office';
 const ACTIVE_SESSION_KEY = 'proxispeak-active-session';
 const AVATAR_PREFERENCE_KEY = 'proxispeak-avatar-id';
+const QUICK_REACTIONS = ['👍', '❤️', '😂', '👀', '🎉', '🙌'];
 
 async function microphoneErrorMessage(error) {
   if (!navigator.mediaDevices?.getUserMedia) {
@@ -93,6 +94,8 @@ export default function App() {
   const [deafened, setDeafened] = useState(false);
   const [volume, setVolume] = useState(80);
   const [roster, setRoster] = useState([]);
+  const [chatEvents, setChatEvents] = useState([]);
+  const [chatDraft, setChatDraft] = useState('');
   const [nearby, setNearby] = useState(0);
   const [fps, setFps] = useState(0);
   const [hasMic, setHasMic] = useState(false);
@@ -282,6 +285,9 @@ export default function App() {
     socket.on('peer:enter', ({ id }) => peers.enter(id));
     socket.on('peer:leave', ({ id }) => peers.leave(id));
     socket.on('rtc:signal', (msg) => peers.handleSignal(msg));
+    socket.on('chat:event', (event) => {
+      setChatEvents((current) => [...current, event].slice(-100));
+    });
   };
 
   useEffect(() => {
@@ -301,6 +307,8 @@ export default function App() {
     setJoined(false);
     setNetwork('offline');
     setRoster([]);
+    setChatEvents([]);
+    setChatDraft('');
     setNearby(0);
     setName('');
   };
@@ -399,6 +407,16 @@ export default function App() {
     world.showDebug = !world.showDebug;
     setShowObstacles(world.showDebug);
   };
+  const sendChat = (event) => {
+    event.preventDefault();
+    const text = chatDraft.trim();
+    if (!text || !joined) return;
+    sessionRef.current?.socket.emit('chat:send', { text });
+    setChatDraft('');
+  };
+  const sendReaction = (reaction) => {
+    sessionRef.current?.socket.emit('reaction:send', { reaction });
+  };
 
   const statusText = { offline: 'Not in the office', connecting: 'Connecting…', connected: 'Live', reconnecting: 'Reconnecting…' }[network];
   const micControlText = !joined ? 'Microphone' : hasMic ? (micOn ? 'Microphone' : 'Microphone muted') : 'Enable microphone';
@@ -474,6 +492,27 @@ export default function App() {
             <div className="map-corner-label"><span>⌖</span> MAIN OFFICE <i /> 1000 × 540</div>
           </div>
           <div className="hint"><span className="hint-icon">↖</span><span><b>Click anywhere</b> to walk</span><span className="hint-divider" /><span><b>WASD</b> or arrow keys to move</span><kbd>SHIFT</kbd><span>to run</span><span className="hint-divider" /><span><kbd>O</kbd> layout</span></div>
+          <section className="chat-panel" aria-label="Team chat">
+            <div className="chat-heading">
+              <div><span className="eyebrow">ASYNC CONVERSATION</span><h3>Team chat</h3></div>
+              <span className="chat-presence">{joined ? 'Room-wide' : 'Join to chat'}</span>
+            </div>
+            <div className="chat-feed" role="log" aria-live="polite" aria-relevant="additions">
+              {chatEvents.length === 0 ? <p className="chat-empty">Messages and reactions from the office will appear here.</p> : chatEvents.map((event) => (
+                <div className={`chat-event${event.type === 'reaction' ? ' reaction-event' : ''}`} key={event.id}>
+                  <span className="chat-event-name">{event.displayName}</span>
+                  {event.type === 'reaction' ? <span className="chat-reaction">{event.reaction}</span> : <span className="chat-message">{event.text}</span>}
+                </div>
+              ))}
+            </div>
+            <div className="reaction-row" aria-label="Quick reactions">
+              {QUICK_REACTIONS.map((reaction) => <button key={reaction} type="button" className="reaction-button" onClick={() => sendReaction(reaction)} disabled={!joined} aria-label={`Send ${reaction} reaction`}>{reaction}</button>)}
+            </div>
+            <form className="chat-compose" onSubmit={sendChat}>
+              <input aria-label="Write a message" value={chatDraft} maxLength={500} onChange={(event) => setChatDraft(event.target.value)} placeholder={joined ? 'Write a message…' : 'Join the office to send a message'} disabled={!joined} />
+              <button type="submit" className="chat-send" disabled={!joined || !chatDraft.trim()} aria-label="Send message">Send</button>
+            </form>
+          </section>
         </section>
 
         <aside className="side">

@@ -7,6 +7,7 @@ import { diffPeers, Metrics } from './proximity.js';
 const ROOM_RE = /^[a-z0-9-]{1,48}$/i;
 const ID_RE = /^[a-zA-Z0-9_-]{5,64}$/;
 const COLOR_RE = /^#[0-9a-f]{6}$/i;
+const REACTIONS = new Set(['👍', '❤️', '😂', '👀', '🎉', '🙌']);
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const num = (v) => typeof v === 'number' && Number.isFinite(v);
 
@@ -131,7 +132,7 @@ export function attachRealtime(io, { store, layouts }) {
         };
         await store.upsert(roomId, user);
         localRoom(roomId).set(user.id, { socketId: socket.id, peers: new Set(), muted: user.muted });
-        Object.assign(socket.data, { roomId, userId: user.id, lastMoveAt: 0 });
+        Object.assign(socket.data, { roomId, userId: user.id, displayName: user.name, lastMoveAt: 0, lastChatAt: 0, lastReactionAt: 0 });
         await socket.join([roomId, `user:${user.id}`]);
         socket.emit('layout:update', { roomId, obstacles: await layouts.get(roomId), hearRadius: hearRadiusFor(roomId) });
         socket.emit('world:snapshot', { roomId, you: user.id, users: await store.all(roomId) });
@@ -168,6 +169,37 @@ export function attachRealtime(io, { store, layouts }) {
       } catch (err) {
         console.error('[voice:status]', err);
       }
+    });
+
+    socket.on('chat:send', ({ text } = {}) => {
+      const { roomId, userId, displayName } = socket.data;
+      const message = typeof text === 'string' ? text.trim() : '';
+      const now = Date.now();
+      if (!roomId || !userId || !message || message.length > 500 || now - socket.data.lastChatAt < 600) return;
+      socket.data.lastChatAt = now;
+      io.to(roomId).emit('chat:event', {
+        id: `${socket.id}:${now}`,
+        type: 'message',
+        userId,
+        displayName,
+        text: message,
+        createdAt: now,
+      });
+    });
+
+    socket.on('reaction:send', ({ reaction } = {}) => {
+      const { roomId, userId, displayName } = socket.data;
+      const now = Date.now();
+      if (!roomId || !userId || !REACTIONS.has(reaction) || now - socket.data.lastReactionAt < 800) return;
+      socket.data.lastReactionAt = now;
+      io.to(roomId).emit('chat:event', {
+        id: `${socket.id}:${now}`,
+        type: 'reaction',
+        userId,
+        displayName,
+        reaction,
+        createdAt: now,
+      });
     });
 
     // WebRTC handshake relay, only allowed between avatars that are within earshot.

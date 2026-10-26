@@ -117,6 +117,32 @@ test('microphone mute state is shared and restored in room snapshots', async () 
   assert.equal(snapshot.data.users.find((user) => user.id === 'user-a').muted, false);
 });
 
+test('chat messages and quick reactions are broadcast to the room with validated content', async () => {
+  const io = makeIo();
+  attachRealtime(io, { store: new MemoryGeoStore(), layouts: { get: async () => [] } });
+  const a = io.connect();
+  const b = io.connect();
+  await join(a, 'user-a', 100, 300);
+  await join(b, 'user-b', 500, 300);
+
+  a.h['chat:send']({ text: '  Hello team  ' });
+  let chatEvent = events(io, 'chat:event').at(-1);
+  assert.equal(chatEvent.room, 'main-office');
+  assert.equal(chatEvent.data.text, 'Hello team');
+  assert.equal(chatEvent.data.displayName, 'user-a');
+  assert.equal(chatEvent.data.type, 'message');
+
+  b.h['reaction:send']({ reaction: '🎉' });
+  chatEvent = events(io, 'chat:event').at(-1);
+  assert.equal(chatEvent.data.reaction, '🎉');
+  assert.equal(chatEvent.data.type, 'reaction');
+
+  const eventCount = events(io, 'chat:event').length;
+  a.h['chat:send']({ text: 'x'.repeat(501) });
+  b.h['reaction:send']({ reaction: '<script>' });
+  assert.equal(events(io, 'chat:event').length, eventCount);
+});
+
 test('server rejects unknown avatar selections', async () => {
   const io = makeIo();
   attachRealtime(io, { store: new MemoryGeoStore(), layouts: { get: async () => [] } });
