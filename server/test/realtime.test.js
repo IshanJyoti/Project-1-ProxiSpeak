@@ -83,6 +83,44 @@ test('invalid join payloads are rejected', async () => {
   assert.ok(a.out.some((o) => o.ev === 'room:error'));
 });
 
+test('join names are trimmed and repeated whitespace is collapsed', async () => {
+  const io = makeIo();
+  const store = new MemoryGeoStore();
+  attachRealtime(io, { store, layouts: { get: async () => [] } });
+  const a = io.connect();
+  await a.h['room:join']({
+    roomId: 'main-office',
+    participant: { id: 'user-a', displayName: '  Aman   Singh  ', color: '#aabbcc' },
+  });
+  assert.equal((await store.get('main-office', 'user-a')).name, 'Aman Singh');
+});
+
+test('join rejects names that contain only whitespace with a clear error', async () => {
+  const io = makeIo();
+  const store = new MemoryGeoStore();
+  attachRealtime(io, { store, layouts: { get: async () => [] } });
+  const a = io.connect();
+  await a.h['room:join']({
+    roomId: 'main-office',
+    participant: { id: 'user-a', displayName: '   ', color: '#aabbcc' },
+  });
+  assert.equal(await store.count('main-office'), 0);
+  assert.ok(a.out.some((o) => o.ev === 'room:error' && o.data.message.includes('Spaces alone are not a name')));
+});
+
+test('join rejects names longer than 32 characters', async () => {
+  const io = makeIo();
+  const store = new MemoryGeoStore();
+  attachRealtime(io, { store, layouts: { get: async () => [] } });
+  const a = io.connect();
+  await a.h['room:join']({
+    roomId: 'main-office',
+    participant: { id: 'user-a', displayName: 'a'.repeat(33), color: '#aabbcc' },
+  });
+  assert.equal(await store.count('main-office'), 0);
+  assert.ok(a.out.some((o) => o.ev === 'room:error' && o.data.message.includes('32 characters or fewer')));
+});
+
 test('selected avatars are shared with room members and restored in snapshots', async () => {
   const io = makeIo();
   const store = new MemoryGeoStore();

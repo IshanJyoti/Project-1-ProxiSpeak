@@ -7,6 +7,7 @@ import { PeerManager } from './rtc/PeerManager.js';
 import { SPAWN } from '../../shared/defaultLayout.js';
 import { WORLD, HEAR_RADIUS, HEAR_HYSTERESIS, HEAR_RADIUS_MIN, HEAR_RADIUS_MAX, HEAR_RADIUS_STEP, dist } from '../../shared/geo.js';
 import { AVATAR_CHOICES, AVATAR_IDS, DEFAULT_AVATAR_ID, avatarById } from '../../shared/avatars.js';
+import { MAX_DISPLAY_NAME_LENGTH, normalizeDisplayName } from '../../shared/name.js';
 
 const ROOM_ID = 'main-office';
 const ACTIVE_SESSION_KEY = 'proxispeak-active-session';
@@ -94,6 +95,7 @@ export default function App() {
   const [joined, setJoined] = useState(false);
   const [network, setNetwork] = useState('offline');
   const [error, setError] = useState('');
+  const [nameError, setNameError] = useState('');
   const [micOn, setMicOn] = useState(true);
   const [deafened, setDeafened] = useState(false);
   const [volume, setVolume] = useState(80);
@@ -202,9 +204,18 @@ export default function App() {
 
   const join = async (withMic, savedSession = null) => {
     setError('');
-    const displayName = (savedSession?.displayName ?? name).trim();
+    setNameError('');
+    const displayName = normalizeDisplayName(savedSession?.displayName ?? name);
     const avatarId = savedSession?.avatarId ?? selectedAvatarId;
-    if (!displayName) return setError('Please enter your name first.');
+    if (!displayName) {
+      setNameError('Enter your name before joining. Spaces alone are not a name.');
+      return;
+    }
+    if (displayName.length > MAX_DISPLAY_NAME_LENGTH) {
+      setNameError(`Your name must be ${MAX_DISPLAY_NAME_LENGTH} characters or fewer.`);
+      return;
+    }
+    setName(displayName);
     let stream;
     if (withMic) {
       try {
@@ -461,7 +472,8 @@ export default function App() {
                   <h2>Good conversations<br />happen nearby.</h2>
                   <p>Step into the office. Move closer to teammates to hear them naturally.</p>
                   <label className="name-label" htmlFor="display-name">YOUR NAME</label>
-                  <input id="display-name" value={name} maxLength={32} placeholder="e.g. Alex Morgan" onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && join(true)} />
+                  <input id="display-name" value={name} maxLength={MAX_DISPLAY_NAME_LENGTH} placeholder="e.g. Alex Morgan" aria-invalid={Boolean(nameError)} aria-describedby={nameError ? 'display-name-error' : undefined} onChange={(e) => { setName(e.target.value); setNameError(''); setError(''); }} onKeyDown={(e) => e.key === 'Enter' && join(true)} />
+                  {nameError && <p id="display-name-error" className="error" role="alert">{nameError}</p>}
                   <div className="avatar-selection">
                     <span className="name-label">CHOOSE YOUR AVATAR</span>
                     <div className="avatar-grid" role="group" aria-label="Choose your avatar">
