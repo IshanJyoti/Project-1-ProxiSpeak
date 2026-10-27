@@ -11,7 +11,11 @@ import { AVATAR_CHOICES, AVATAR_IDS, DEFAULT_AVATAR_ID, avatarById } from '../..
 const ROOM_ID = 'main-office';
 const ACTIVE_SESSION_KEY = 'proxispeak-active-session';
 const AVATAR_PREFERENCE_KEY = 'proxispeak-avatar-id';
-const QUICK_REACTIONS = ['👍', '❤️', '😂', '👀', '🎉', '🙌'];
+const QUICK_REACTIONS = [
+  '👍', '❤️', '😂', '👀', '🎉', '🙌',
+  '🔥', '💯', '👏', '😍', '🤔', '😎', '🚀', '☕', '👋', '🙏',
+  '💡', '✅', '❌', '🤝', '🥳', '😴', '💪', '🌟', '😢', '🤯',
+];
 
 async function microphoneErrorMessage(error) {
   if (!navigator.mediaDevices?.getUserMedia) {

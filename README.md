@@ -3,22 +3,59 @@
 A 2D virtual office (your `room.png` floor plan) where voice volume depends on how close avatars are.
 Walk toward a group and their WebRTC audio fades in; walls and furniture muffle it.
 
-## Run it
+## Local setup
+
+### Requirements
+
+- Node.js 20.6 or newer and npm.
+- Docker Desktop only if you want to run MongoDB and Redis locally.
+
+### Quick start (in-memory, no Docker required)
+
+From the project root, install the server and client dependencies:
 
 ```bash
-docker compose up -d            # MongoDB + Redis
 npm run install:all
-npm run dev:server              # http://localhost:8080
-npm run dev:client              # http://localhost:5173
 ```
 
-For MongoDB Atlas, copy `.env.example` to `.env` in the project root, then set `MONGO_URL`
-to the Atlas connection URI and `MONGO_DB=proxispeak`. Keep `.env` private; it is gitignored.
-The server loads this root `.env` automatically. For local Docker MongoDB, use
-`MONGO_URL=mongodb://localhost:27017`.
+Start both the API server and the Vite client:
 
-On Windows PowerShell, copy the example with `Copy-Item .env.example .env`, then edit `.env`
-in VS Code. Do not commit or share `.env`.
+```bash
+npm run dev
+```
+
+Open <http://localhost:5173>. The API listens on <http://localhost:8080>; Vite forwards
+`/api` requests to it. Press Ctrl+C in the terminal to stop both processes.
+
+The app runs without a database using an in-memory store. This is suitable for local
+development, but presence and saved room layouts will not persist when the server restarts.
+
+### Optional: persistent local MongoDB and Redis
+
+Start the local services with Docker:
+
+```bash
+docker compose up -d
+```
+
+In the project root, create `.env` and add:
+
+```dotenv
+MONGO_URL=mongodb://localhost:27017
+MONGO_DB=proxispeak
+REDIS_URL=redis://localhost:6379
+```
+
+Restart the server after changing `.env`. The server loads this root-level file automatically.
+Keep `.env` private; it is gitignored. To use MongoDB Atlas instead, set `MONGO_URL` to your
+Atlas connection URI and retain `MONGO_DB=proxispeak`. Redis is optional; without it,
+Socket.io runs as a single server instance.
+
+On Windows PowerShell, create the file with `New-Item .env -ItemType File` and edit it in
+VS Code. If you prefer separate terminals, run `npm run dev:server` in one and
+`npm run dev:client` in the other instead of `npm run dev`.
+
+### Try the app
 
 Open the client in two separate browser profiles (for example, a regular window and a private window), use different names, join with the microphone, and walk the avatars together.
 Use headphones, otherwise you will hear echo. Browsers allow the microphone on `localhost` or HTTPS only.
