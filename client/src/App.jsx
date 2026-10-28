@@ -12,6 +12,7 @@ import { MAX_DISPLAY_NAME_LENGTH, normalizeDisplayName } from '../../shared/name
 const ROOM_ID = 'main-office';
 const ACTIVE_SESSION_KEY = 'proxispeak-active-session';
 const AVATAR_PREFERENCE_KEY = 'proxispeak-avatar-id';
+const MICROPHONE_PREFERENCE_KEY = 'proxispeak-microphone-id';
 const QUICK_REACTIONS = [
   '👍', '❤️', '😂', '👀', '🎉', '🙌',
   '🔥', '💯', '👏', '😍', '🤔', '😎', '🚀', '☕', '👋', '🙏',
@@ -105,6 +106,9 @@ export default function App() {
   const [nearby, setNearby] = useState(0);
   const [fps, setFps] = useState(0);
   const [hasMic, setHasMic] = useState(false);
+  const [audioInputs, setAudioInputs] = useState([]);
+  const [selectedMicrophoneId, setSelectedMicrophoneId] = useState(() => localStorage.getItem(MICROPHONE_PREFERENCE_KEY) || '');
+  const [switchingMicrophone, setSwitchingMicrophone] = useState(false);
   const [mixer, setMixer] = useState(null);
   const [showObstacles, setShowObstacles] = useState(false);
   const [hearRadius, setHearRadius] = useState(HEAR_RADIUS);
@@ -131,6 +135,31 @@ export default function App() {
       .catch((err) => { if (active) setRangeError(err.message); });
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    const updateAudioInputs = async () => {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        if (!active) return;
+        const inputs = devices.filter((device) => device.kind === 'audioinput');
+        setAudioInputs(inputs);
+        setSelectedMicrophoneId((current) => {
+          if (!current || inputs.length === 0 || inputs.some((device) => device.deviceId === current)) return current;
+          localStorage.removeItem(MICROPHONE_PREFERENCE_KEY);
+          return '';
+        });
+      } catch (enumerationError) {
+        if (active) setError(`Could not list microphones: ${enumerationError.message || 'Device discovery failed.'}`);
+      }
+    };
+    void updateAudioInputs();
+    navigator.mediaDevices?.addEventListener?.('devicechange', updateAudioInputs);
+    return () => {
+      active = false;
+      navigator.mediaDevices?.removeEventListener?.('devicechange', updateAudioInputs);
+    };
+  }, [hasMic]);
 
   const refreshRoster = useCallback(() => {
     const session = sessionRef.current;
@@ -218,10 +247,14 @@ export default function App() {
     setName(displayName);
     let stream;
     if (withMic) {
+      setSwitchingMicrophone(true);
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const audio = selectedMicrophoneId ? { deviceId: { exact: selectedMicrophoneId } } : true;
+        stream = await navigator.mediaDevices.getUserMedia({ audio });
       } catch (micError) {
         setError(`${await microphoneErrorMessage(micError)} You can join now in listen-only mode and enable your microphone later.`);
+      } finally {
+        setSwitchingMicrophone(false);
       }
     }
     let selfId = localStorage.getItem('proxispeak-id');
@@ -365,10 +398,13 @@ export default function App() {
     refreshRoster();
   };
   const enableMic = async () => {
+    const session = sessionRef.current;
+    if (!session) return;
+    setSwitchingMicrophone(true);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const session = sessionRef.current;
-      if (!session) {
+      const audio = selectedMicrophoneId ? { deviceId: { exact: selectedMicrophoneId } } : true;
+      const stream = await navigator.mediaDevices.getUserMedia({ audio });
+      if (sessionRef.current !== session) {
         stream.getTracks().forEach((track) => track.stop());
         return;
       }
@@ -384,6 +420,42 @@ export default function App() {
       for (const id of peerIds) session.peers.enter(id);
     } catch (micError) {
       setError(await microphoneErrorMessage(micError));
+    } finally {
+      setSwitchingMicrophone(false);
+    }
+  };
+  const chooseMicrophone = async (event) => {
+    const deviceId = event.target.value;
+    const session = sessionRef.current;
+    if (!session || !hasMic) {
+      setSelectedMicrophoneId(deviceId);
+      localStorage.setItem(MICROPHONE_PREFERENCE_KEY, deviceId);
+      return;
+    }
+
+    setSwitchingMicrophone(true);
+    try {
+      const audio = deviceId ? { deviceId: { exact: deviceId } } : true;
+      const stream = await navigator.mediaDevices.getUserMedia({ audio });
+      if (sessionRef.current !== session) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      stream.getAudioTracks().forEach((track) => { track.enabled = micOn; });
+      const previousStream = session.stream;
+      const peerIds = session.peers.ids();
+      session.peers.closeAll();
+      session.stream = stream;
+      session.peers.stream = stream;
+      previousStream?.getTracks().forEach((track) => track.stop());
+      for (const id of peerIds) session.peers.enter(id);
+      setSelectedMicrophoneId(deviceId);
+      localStorage.setItem(MICROPHONE_PREFERENCE_KEY, deviceId);
+      setError('');
+    } catch (micError) {
+      setError(await microphoneErrorMessage(micError));
+    } finally {
+      setSwitchingMicrophone(false);
     }
   };
   const toggleDeafen = () => { const next = !deafened; setDeafened(next); sessionRef.current?.mixer.setMuted(next); };
@@ -432,6 +504,13 @@ export default function App() {
   const sendReaction = (reaction) => {
     sessionRef.current?.socket.emit('reaction:send', { reaction });
   };
+  const retryConnection = () => {
+    const socket = sessionRef.current?.socket;
+    if (!socket) return;
+    socket.disconnect();
+    setNetwork('connecting');
+    socket.connect();
+  };
 
   const statusText = { offline: 'Not in the office', connecting: 'Connecting…', connected: 'Live', reconnecting: 'Reconnecting…' }[network];
   const micControlText = !joined ? 'Microphone' : hasMic ? (micOn ? 'Microphone' : 'Microphone muted') : 'Enable microphone';
@@ -448,7 +527,7 @@ export default function App() {
         </div>
         <div className="topbar-right">
           <div className="room-chip"><span className="room-dot" />MAIN OFFICE</div>
-          <div className="status"><i className={`led ${network}`} />{statusText}{joined && <span className="fps">{fps} FPS</span>}</div>
+          <div className="status"><i className={`led ${network}`} />{statusText}{joined && network === 'reconnecting' && <button type="button" className="retry-connection" onClick={retryConnection}>Retry</button>}{joined && <span className="fps">{fps} FPS</span>}</div>
         </div>
       </header>
 
@@ -542,6 +621,16 @@ export default function App() {
                 <span className="control-icon" aria-hidden="true">{deafened ? '◌' : '◖'}</span><span>{deafened ? 'Room audio muted' : 'Room audio'}</span><b>{roomControlState}</b>
               </button>
             </div>
+            <label className="microphone-select">
+              <span>Microphone input</span>
+              <select aria-label="Microphone input" value={selectedMicrophoneId} onChange={chooseMicrophone} disabled={switchingMicrophone || audioInputs.length === 0}>
+                <option value="">System default</option>
+                {audioInputs.map((device, index) => (
+                  <option key={device.deviceId} value={device.deviceId}>{device.label || `Microphone ${index + 1}`}</option>
+                ))}
+              </select>
+              {switchingMicrophone && <small>Switching microphone…</small>}
+            </label>
             <label className="vol"><span>Room volume</span><b>{volume}%</b><input aria-label="Room volume" type="range" min="0" max="100" value={volume} onChange={(e) => changeVolume(Number(e.target.value))} /></label>
             <button className="leave" onClick={leave} disabled={!joined}><span aria-hidden="true">↗</span> Leave office</button>
             {joined && error && <p className="error" role="alert">{error}</p>}

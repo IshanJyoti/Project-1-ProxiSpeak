@@ -50,6 +50,9 @@ button { color: inherit; }
 .room-chip { gap: 8px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 20px; color: #65716e; font-size: 10px; font-weight: 700; letter-spacing: .65px; }
 .room-dot, .online-dot { width: 7px; height: 7px; border-radius: 50%; background: #29ad7e; box-shadow: 0 0 0 3px #e8f6ef; }
 .status { gap: 8px; color: #52615d; font-size: 12px; font-weight: 600; }
+.retry-connection { padding: 4px 8px; border: 1px solid #e8c98e; border-radius: 6px; background: #fffaf0; color: #8a641f; font-size: 10px; font-weight: 700; cursor: pointer; }
+.retry-connection:hover { border-color: #d7ad60; background: #fff3d8; }
+.retry-connection:focus-visible { outline: 2px solid #16866c; outline-offset: 2px; }
 .led { display: inline-block; flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; background: #b4bfba; }
 .led.connected { background: #27ab7b; box-shadow: 0 0 0 3px #e4f5ec; }
 .led.connecting, .led.reconnecting { background: #e8a83f; box-shadow: 0 0 0 3px #fff5e1; }
@@ -155,6 +158,10 @@ button.primary:hover:not(:disabled) { border-color: #0c745d; background: #0f795f
 .control-button.selected .control-icon { background: #f8e9e7; color: #ad5a50; }
 .control-button > b { margin-left: auto; color: #6d9c84; font-size: 8px; letter-spacing: .6px; }
 .control-button.selected > b { color: #b65d53; }
+.microphone-select { display: grid; gap: 7px; margin-top: 14px; color: #66736f; font-size: 10px; font-weight: 600; }
+.microphone-select select { width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid #e0e7e2; border-radius: 8px; background: #fbfcfb; color: var(--ink); font-size: 11px; }
+.microphone-select select:focus-visible { outline: 2px solid #16866c; outline-offset: 2px; }
+.microphone-select small { color: #8b9792; font-size: 9px; font-weight: 500; }
 .vol { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 9px; margin-top: 17px; color: #66736f; font-size: 10px; font-weight: 600; }
 .vol > b { color: #33463f; font-size: 10px; }
 .vol input { grid-column: 1 / -1; width: 100%; height: 4px; margin: 2px 0; accent-color: var(--teal); cursor: pointer; }
