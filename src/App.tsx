@@ -325,7 +325,7 @@ export default function App() {
   const [chatInput, setChatInput] = useState('');
   const [localBubble, setLocalBubble] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const bubbleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const bubbleTimeoutRef = useRef<number | null>(null);
 
   const posRef = useRef({ x: 400, y: 300 });
   const keys = useRef<{ [key: string]: boolean }>({});
