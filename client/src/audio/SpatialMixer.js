@@ -7,6 +7,8 @@ export class SpatialMixer {
     this.master = this.ctx.createGain();
     this.master.connect(this.ctx.destination);
     this.peers = new Map();
+    this.peerVolumes = new Map();
+    this.mutedPeers = new Set();
     this.volume = 0.8;
     this.muted = false;
   }
@@ -47,7 +49,7 @@ export class SpatialMixer {
       if (!u) { p.gain.gain.setTargetAtTime(0, t, 0.05); p.g = 0; continue; }
       const d = dist(self, u);
       const occ = occlusion(self, u, obstacles);       // walls/furniture between us block sound
-      p.g = this.muted ? 0 : attenuation(d, occ, hearRadius) * this.volume;
+      p.g = this.muted || this.mutedPeers.has(id) ? 0 : attenuation(d, occ, hearRadius) * this.volume * this.peerVolumeOf(id);
       p.gain.gain.setTargetAtTime(p.g, t, 0.06);       // smooth cross-fade, no clicks
       p.panner.pan.setTargetAtTime(pan(u.x - self.x, hearRadius), t, 0.06);
     }
@@ -65,6 +67,13 @@ export class SpatialMixer {
   }
 
   setVolume(v) { this.volume = v; }
+  peerVolumeOf(id) { return this.peerVolumes.get(id) ?? 1; }
+  setPeerVolume(id, v) { this.peerVolumes.set(id, Math.max(0, Math.min(1, v))); }
+  isPeerMuted(id) { return this.mutedPeers.has(id); }
+  setPeerMuted(id, muted) {
+    if (muted) this.mutedPeers.add(id);
+    else this.mutedPeers.delete(id);
+  }
   setMuted(m) { this.muted = m; }
   close() { for (const id of [...this.peers.keys()]) this.removePeer(id); this.ctx.close().catch(() => {}); }
 }

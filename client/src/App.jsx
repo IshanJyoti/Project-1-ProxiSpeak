@@ -171,6 +171,8 @@ export default function App() {
       muted,
       connection: session?.peers.statusOf(id) ?? 'outside',
       speaking: Boolean(session?.mixer.levelOf(id) > 0.08),
+      volume: session?.mixer.peerVolumeOf(id) ?? 1,
+      locallyMuted: session?.mixer.isPeerMuted(id) ?? false,
     })));
   }, [world]);
 
@@ -460,6 +462,16 @@ export default function App() {
   };
   const toggleDeafen = () => { const next = !deafened; setDeafened(next); sessionRef.current?.mixer.setMuted(next); };
   const changeVolume = (v) => { setVolume(v); sessionRef.current?.mixer.setVolume(v / 100); };
+  const changePeerVolume = (id, v) => {
+    sessionRef.current?.mixer.setPeerVolume(id, v / 100);
+    refreshRoster();
+  };
+  const togglePeerMute = (id) => {
+    const mixer = sessionRef.current?.mixer;
+    if (!mixer) return;
+    mixer.setPeerMuted(id, !mixer.isPeerMuted(id));
+    refreshRoster();
+  };
   const saveHearRadius = async () => {
     setSavingRange(true);
     setRangeError('');
@@ -551,7 +563,7 @@ export default function App() {
                   <h2>Good conversations<br />happen nearby.</h2>
                   <p>Step into the office. Move closer to teammates to hear them naturally.</p>
                   <label className="name-label" htmlFor="display-name">YOUR NAME</label>
-                  <input id="display-name" value={name} maxLength={MAX_DISPLAY_NAME_LENGTH} placeholder="e.g. Alex Morgan" aria-invalid={Boolean(nameError)} aria-describedby={nameError ? 'display-name-error' : undefined} onChange={(e) => { setName(e.target.value); setNameError(''); setError(''); }} onKeyDown={(e) => e.key === 'Enter' && join(true)} />
+                  <input id="display-name" value={name} maxLength={MAX_DISPLAY_NAME_LENGTH} placeholder="Type your name" aria-invalid={Boolean(nameError)} aria-describedby={nameError ? 'display-name-error' : undefined} onChange={(e) => { setName(e.target.value); setNameError(''); setError(''); }} onKeyDown={(e) => e.key === 'Enter' && join(true)} />
                   {nameError && <p id="display-name-error" className="error" role="alert">{nameError}</p>}
                   <div className="avatar-selection">
                     <span className="name-label">CHOOSE YOUR AVATAR</span>
@@ -662,7 +674,7 @@ export default function App() {
               {roster.map((p) => {
                 const connectionText = { connecting: 'Audio connecting', connected: 'Audio connected', disconnecting: 'Audio disconnecting', outside: 'Outside audio range' }[p.connection] ?? 'Audio unavailable';
                 const voiceText = p.muted ? 'Microphone muted' : p.speaking ? 'Speaking' : 'Microphone on';
-                return <li key={p.id}><span className="dot" style={{ background: p.color }}><AvatarPreview avatarId={p.avatarId} /></span><span className="person-name">{p.name}<small className={`connection-status is-${p.connection}`}>{connectionText}</small><small className={`voice-status${p.muted ? ' is-muted' : p.speaking ? ' is-speaking' : ''}`}>{voiceText}</small></span><span className="online-dot" /></li>;
+                return <li key={p.id}><span className="dot" style={{ background: p.color }}><AvatarPreview avatarId={p.avatarId} /></span><span className="person-name">{p.name}<small className={`connection-status is-${p.connection}`}>{connectionText}</small><small className={`voice-status${p.muted ? ' is-muted' : p.speaking ? ' is-speaking' : ''}`}>{voiceText}</small><div className="person-volume"><label htmlFor={`volume-${p.id}`}>Volume</label><b>{Math.round(p.volume * 100)}%</b><input id={`volume-${p.id}`} type="range" min="0" max="100" value={Math.round(p.volume * 100)} aria-label={`Volume for ${p.name}`} onChange={(event) => changePeerVolume(p.id, Number(event.target.value))} /><button type="button" className={`person-mute${p.locallyMuted ? ' is-muted' : ''}`} aria-label={`${p.locallyMuted ? 'Unmute' : 'Mute'} ${p.name} locally`} aria-pressed={p.locallyMuted} onClick={() => togglePeerMute(p.id)}>{p.locallyMuted ? 'Unmute' : 'Mute'}</button></div></span><span className="online-dot" /></li>;
               })}
               {!joined && <li className="empty-roster">Join the room to meet your team.</li>}
               {joined && roster.length === 0 && <li className="empty-roster">You’re the first one here. Invite your team!</li>}
