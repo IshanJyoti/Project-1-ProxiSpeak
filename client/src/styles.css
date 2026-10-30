@@ -100,6 +100,7 @@ kbd { padding: 3px 5px; border: 1px solid #e4e9e5; border-radius: 4px; backgroun
 .chat-empty { align-self: center; margin: auto; color: #9aa39f; font-size: 11px; }
 .chat-event { display: flex; align-items: baseline; gap: 9px; min-width: 0; font-size: 11px; line-height: 1.45; }
 .chat-event-name { flex: 0 0 auto; color: #16866c; font-weight: 700; }
+.chat-event-time { flex: 0 0 auto; color: #9aa39f; font-size: 9px; font-variant-numeric: tabular-nums; }
 .chat-message { min-width: 0; overflow-wrap: anywhere; color: #46534e; }
 .reaction-event { align-items: center; }
 .chat-reaction { font-size: 18px; line-height: 1; }
@@ -158,6 +159,15 @@ button.primary:hover:not(:disabled) { border-color: #0c745d; background: #0f795f
 .control-button.selected .control-icon { background: #f8e9e7; color: #ad5a50; }
 .control-button > b { margin-left: auto; color: #6d9c84; font-size: 8px; letter-spacing: .6px; }
 .control-button.selected > b { color: #b65d53; }
+.control-button.push-to-talk-enabled { border-color: #cde7da; background: #f3faf6; color: #14785f; }
+.control-button.push-to-talk-enabled .control-icon { background: #e2f2e9; color: #16866c; }
+.control-button.push-to-talk-enabled > b { color: #358165; }
+.control-button.push-to-talk-hold { touch-action: none; user-select: none; }
+.control-button.push-to-talk-hold > span:nth-child(2) { display: flex; align-items: center; gap: 7px; }
+.control-button.push-to-talk-hold kbd { color: #66736e; }
+.control-button.push-to-talk-hold.is-transmitting { border-color: #72bea1; background: #eaf6ef; color: #14785f; }
+.control-button.push-to-talk-hold.is-transmitting .control-icon { background: #d7efdf; color: #14785f; }
+.control-button.push-to-talk-hold.is-transmitting > b { color: #16866c; }
 .microphone-select { display: grid; gap: 7px; margin-top: 14px; color: #66736f; font-size: 10px; font-weight: 600; }
 .microphone-select select { width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid #e0e7e2; border-radius: 8px; background: #fbfcfb; color: var(--ink); font-size: 11px; }
 .microphone-select select:focus-visible { outline: 2px solid #16866c; outline-offset: 2px; }
@@ -195,6 +205,14 @@ button.primary:hover:not(:disabled) { border-color: #0c745d; background: #0f795f
 .person-name .connection-status.is-connected { color: #358165; }
 .person-name .voice-status.is-muted { color: #aa741e; }
 .person-name .voice-status.is-speaking { color: #16866c; font-weight: 700; }
+.participant-states { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; white-space: normal; }
+.person-name small.participant-state { display: inline-flex; align-items: center; gap: 4px; margin: 0; padding: 3px 6px; border-radius: 10px; font-size: 8px; line-height: 1; }
+.participant-state i { width: 5px; height: 5px; flex: 0 0 auto; border-radius: 50%; background: currentColor; }
+.person-name .proximity-status.is-nearby { background: #eaf6ef; color: #358165; }
+.person-name .proximity-status.is-away { background: #f1f3f1; color: #87938e; }
+.person-name .voice-status { background: #f1f3f1; color: #687772; }
+.person-name .voice-status.is-muted { background: #fff5e3; color: #aa741e; }
+.person-name .voice-status.is-speaking { background: #e8f5ef; color: #16866c; font-weight: 700; }
 .person-volume { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 4px 8px; margin-top: 7px; color: #87938e; font-size: 9px; font-weight: 500; }
 .person-volume b { color: #56665f; font-size: 9px; font-variant-numeric: tabular-nums; }
 .person-volume input { grid-column: 1 / 3; grid-row: 2; width: 100%; height: 4px; margin: 1px 0; accent-color: var(--teal); cursor: pointer; }

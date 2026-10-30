@@ -7,7 +7,6 @@ import { PeerManager } from './rtc/PeerManager.js';
 import { SPAWN } from '../../shared/defaultLayout.js';
 import { WORLD, HEAR_RADIUS, HEAR_HYSTERESIS, HEAR_RADIUS_MIN, HEAR_RADIUS_MAX, HEAR_RADIUS_STEP, dist } from '../../shared/geo.js';
 import { AVATAR_CHOICES, AVATAR_IDS, DEFAULT_AVATAR_ID, avatarById } from '../../shared/avatars.js';
-import { MAX_DISPLAY_NAME_LENGTH, normalizeDisplayName } from '../../shared/name.js';
 
 const ROOM_ID = 'main-office';
 const ACTIVE_SESSION_KEY = 'proxispeak-active-session';
@@ -88,6 +87,9 @@ export default function App() {
   const tabIdRef = useRef(sessionStorage.getItem('proxispeak-tab-id') || `tab-${Math.random().toString(36).slice(2, 12)}`);
   const frameCount = useRef(0);
   const hearRadiusRef = useRef(HEAR_RADIUS);
+  const pushToTalkEnabledRef = useRef(false);
+  const pushToTalkSourcesRef = useRef(new Set());
+  const pushToTalkButtonRef = useRef(null);
   const [name, setName] = useState('');
   const [selectedAvatarId, setSelectedAvatarId] = useState(() => {
     const saved = localStorage.getItem(AVATAR_PREFERENCE_KEY);
@@ -96,8 +98,9 @@ export default function App() {
   const [joined, setJoined] = useState(false);
   const [network, setNetwork] = useState('offline');
   const [error, setError] = useState('');
-  const [nameError, setNameError] = useState('');
   const [micOn, setMicOn] = useState(true);
+  const [pushToTalkEnabled, setPushToTalkEnabled] = useState(false);
+  const [pushToTalkActive, setPushToTalkActive] = useState(false);
   const [deafened, setDeafened] = useState(false);
   const [volume, setVolume] = useState(80);
   const [roster, setRoster] = useState([]);
@@ -137,7 +140,6 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    let active = true;
     const updateAudioInputs = async () => {
       try {
         const devices = await navigator.mediaDevices.enumerateDevices();
@@ -153,6 +155,7 @@ export default function App() {
         if (active) setError(`Could not list microphones: ${enumerationError.message || 'Device discovery failed.'}`);
       }
     };
+    let active = true;
     void updateAudioInputs();
     navigator.mediaDevices?.addEventListener?.('devicechange', updateAudioInputs);
     return () => {
@@ -163,16 +166,13 @@ export default function App() {
 
   const refreshRoster = useCallback(() => {
     const session = sessionRef.current;
-    setRoster([...world.users.values()].map(({ id, name, color, avatarId, muted }) => ({
-      id,
-      name,
-      color,
-      avatarId,
-      muted,
-      connection: session?.peers.statusOf(id) ?? 'outside',
-      speaking: Boolean(session?.mixer.levelOf(id) > 0.08),
-      volume: session?.mixer.peerVolumeOf(id) ?? 1,
-      locallyMuted: session?.mixer.isPeerMuted(id) ?? false,
+    setRoster([...world.users.values()].map((user) => ({
+      ...user,
+      connection: session?.peers.statusOf(user.id) ?? 'outside',
+      speaking: Boolean(session?.mixer.levelOf(user.id) > 0.08),
+      volume: session?.mixer.peerVolumeOf(user.id) ?? 1,
+      locallyMuted: session?.mixer.isPeerMuted(user.id) ?? false,
+      nearby: dist(world.self, user) <= hearRadiusRef.current,
     })));
   }, [world]);
 
@@ -235,18 +235,9 @@ export default function App() {
 
   const join = async (withMic, savedSession = null) => {
     setError('');
-    setNameError('');
-    const displayName = normalizeDisplayName(savedSession?.displayName ?? name);
+    const displayName = (savedSession?.displayName ?? name).trim();
     const avatarId = savedSession?.avatarId ?? selectedAvatarId;
-    if (!displayName) {
-      setNameError('Enter your name before joining. Spaces alone are not a name.');
-      return;
-    }
-    if (displayName.length > MAX_DISPLAY_NAME_LENGTH) {
-      setNameError(`Your name must be ${MAX_DISPLAY_NAME_LENGTH} characters or fewer.`);
-      return;
-    }
-    setName(displayName);
+    if (!displayName) return setError('Please enter your name first.');
     let stream;
     if (withMic) {
       setSwitchingMicrophone(true);
@@ -268,7 +259,8 @@ export default function App() {
     world.selfId = selfId;
     world.selfName = displayName;
     world.selfAvatarId = avatarId;
-    world.selfMuted = !stream;
+    if (stream && pushToTalkEnabled) stream.getAudioTracks().forEach((track) => { track.enabled = false; });
+    world.selfMuted = !stream || pushToTalkEnabled;
     world.selfColor = colorFor(selfId);
     world.self = savedSession ? { ...savedSession.position } : { ...SPAWN };
 
@@ -286,7 +278,7 @@ export default function App() {
     sessionRef.current = { socket, peers, mixer: m, stream, heartbeat };
     setMixer(m);
     setHasMic(Boolean(stream));
-    setMicOn(Boolean(stream));
+    setMicOn(Boolean(stream) && !pushToTalkEnabled);
     setNetwork('connecting');
     setJoined(true);
     sessionStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify({
@@ -389,15 +381,82 @@ export default function App() {
     }
   }, [refreshRoster, world]);
 
+  const setMicrophoneTransmitting = useCallback((transmitting) => {
+    const session = sessionRef.current;
+    if (!session?.stream) {
+      setMicOn(false);
+      world.selfMuted = true;
+      return;
+    }
+    session.stream.getAudioTracks().forEach((track) => { track.enabled = transmitting; });
+    setMicOn(transmitting);
+    world.selfMuted = !transmitting;
+    session.socket.emit('voice:status', { muted: !transmitting });
+    refreshRoster();
+  }, [refreshRoster, world]);
+  const setPushToTalkSource = useCallback((source, pressed) => {
+    if (!pushToTalkEnabledRef.current || !joined || !hasMic) return;
+    const sources = pushToTalkSourcesRef.current;
+    const previouslyPressed = sources.has(source);
+    if (previouslyPressed === pressed) return;
+    if (pressed) sources.add(source);
+    else sources.delete(source);
+    const transmitting = sources.size > 0;
+    setPushToTalkActive(transmitting);
+    setMicrophoneTransmitting(transmitting);
+  }, [hasMic, joined, setMicrophoneTransmitting]);
+  const togglePushToTalk = () => {
+    const next = !pushToTalkEnabled;
+    pushToTalkEnabledRef.current = next;
+    pushToTalkSourcesRef.current.clear();
+    setPushToTalkEnabled(next);
+    setPushToTalkActive(false);
+    setMicrophoneTransmitting(false);
+  };
+  useEffect(() => {
+    if (!pushToTalkEnabled || !joined) return undefined;
+    const isTyping = (target) => /INPUT|TEXTAREA|SELECT/.test(target?.tagName ?? '') || target?.isContentEditable;
+    const onKeyDown = (event) => {
+      if (event.repeat || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.code === 'KeyV' && !isTyping(event.target)) {
+        event.preventDefault();
+        setPushToTalkSource('keyboard', true);
+      } else if ((event.code === 'Space' || event.code === 'Enter') && document.activeElement === pushToTalkButtonRef.current) {
+        event.preventDefault();
+        setPushToTalkSource('button-keyboard', true);
+      }
+    };
+    const onKeyUp = (event) => {
+      if (event.code === 'KeyV') setPushToTalkSource('keyboard', false);
+      if (event.code === 'Space' || event.code === 'Enter') setPushToTalkSource('button-keyboard', false);
+    };
+    const releaseAll = () => {
+      if (pushToTalkSourcesRef.current.size === 0) return;
+      pushToTalkSourcesRef.current.clear();
+      setPushToTalkActive(false);
+      setMicrophoneTransmitting(false);
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') releaseAll();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', releaseAll);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', releaseAll);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      releaseAll();
+    };
+  }, [joined, pushToTalkEnabled, setMicrophoneTransmitting, setPushToTalkSource]);
+
   const toggleMic = () => {
+    if (pushToTalkEnabled) return;
     const stream = sessionRef.current?.stream;
     if (!stream) return;
-    const next = !micOn;
-    stream.getAudioTracks().forEach((t) => { t.enabled = next; });
-    setMicOn(next);
-    world.selfMuted = !next;
-    sessionRef.current?.socket.emit('voice:status', { muted: !next });
-    refreshRoster();
+    setMicrophoneTransmitting(!micOn);
   };
   const enableMic = async () => {
     const session = sessionRef.current;
@@ -410,15 +469,17 @@ export default function App() {
         stream.getTracks().forEach((track) => track.stop());
         return;
       }
+      const shouldTransmit = !pushToTalkEnabled;
+      stream.getAudioTracks().forEach((track) => { track.enabled = shouldTransmit; });
       session.stream = stream;
       const peerIds = session.peers.ids();
       session.peers.closeAll();
       session.peers.stream = stream;
       setHasMic(true);
-      setMicOn(true);
-      world.selfMuted = false;
+      setMicOn(shouldTransmit);
+      world.selfMuted = !shouldTransmit;
       setError('');
-      session.socket.emit('voice:status', { muted: false });
+      session.socket.emit('voice:status', { muted: !shouldTransmit });
       for (const id of peerIds) session.peers.enter(id);
     } catch (micError) {
       setError(await microphoneErrorMessage(micError));
@@ -443,7 +504,7 @@ export default function App() {
         stream.getTracks().forEach((track) => track.stop());
         return;
       }
-      stream.getAudioTracks().forEach((track) => { track.enabled = micOn; });
+      stream.getAudioTracks().forEach((track) => { track.enabled = pushToTalkEnabled ? pushToTalkActive : micOn; });
       const previousStream = session.stream;
       const peerIds = session.peers.ids();
       session.peers.closeAll();
@@ -563,8 +624,7 @@ export default function App() {
                   <h2>Good conversations<br />happen nearby.</h2>
                   <p>Step into the office. Move closer to teammates to hear them naturally.</p>
                   <label className="name-label" htmlFor="display-name">YOUR NAME</label>
-                  <input id="display-name" value={name} maxLength={MAX_DISPLAY_NAME_LENGTH} placeholder="Type your name" aria-invalid={Boolean(nameError)} aria-describedby={nameError ? 'display-name-error' : undefined} onChange={(e) => { setName(e.target.value); setNameError(''); setError(''); }} onKeyDown={(e) => e.key === 'Enter' && join(true)} />
-                  {nameError && <p id="display-name-error" className="error" role="alert">{nameError}</p>}
+                  <input id="display-name" value={name} maxLength={32} placeholder="Type your name" onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && join(true)} />
                   <div className="avatar-selection">
                     <span className="name-label">CHOOSE YOUR AVATAR</span>
                     <div className="avatar-grid" role="group" aria-label="Choose your avatar">
@@ -605,12 +665,16 @@ export default function App() {
               <span className="chat-presence">{joined ? 'Room-wide' : 'Join to chat'}</span>
             </div>
             <div className="chat-feed" role="log" aria-live="polite" aria-relevant="additions">
-              {chatEvents.length === 0 ? <p className="chat-empty">Messages and reactions from the office will appear here.</p> : chatEvents.map((event) => (
-                <div className={`chat-event${event.type === 'reaction' ? ' reaction-event' : ''}`} key={event.id}>
-                  <span className="chat-event-name">{event.displayName}</span>
-                  {event.type === 'reaction' ? <span className="chat-reaction">{event.reaction}</span> : <span className="chat-message">{event.text}</span>}
-                </div>
-              ))}
+              {chatEvents.length === 0 ? <p className="chat-empty">Messages and reactions from the office will appear here.</p> : chatEvents.map((event) => {
+                const sentAt = Number.isFinite(event.createdAt) ? new Date(event.createdAt) : null;
+                return (
+                  <div className={`chat-event${event.type === 'reaction' ? ' reaction-event' : ''}`} key={event.id}>
+                    <span className="chat-event-name">{event.displayName}</span>
+                    {sentAt && <time className="chat-event-time" dateTime={sentAt.toISOString()}>{sentAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</time>}
+                    {event.type === 'reaction' ? <span className="chat-reaction">{event.reaction}</span> : <span className="chat-message">{event.text}</span>}
+                  </div>
+                );
+              })}
             </div>
             <div className="reaction-row" aria-label="Quick reactions">
               {QUICK_REACTIONS.map((reaction) => <button key={reaction} type="button" className="reaction-button" onClick={() => sendReaction(reaction)} disabled={!joined} aria-label={`Send ${reaction} reaction`}>{reaction}</button>)}
@@ -626,8 +690,30 @@ export default function App() {
           <section className="panel">
             <div className="panel-heading"><div><span className="eyebrow">AUDIO</span><h3>Quick controls</h3></div><span className={`audio-state${joined ? ' active' : ''}`}><i />{joined ? 'ACTIVE' : 'IDLE'}</span></div>
             <div className="control-stack">
-              <button className={`control-button${!micOn && joined && hasMic ? ' selected' : ''}`} onClick={hasMic ? toggleMic : enableMic} disabled={!joined} aria-pressed={joined && hasMic && !micOn}>
+              <button className={`control-button${!micOn && joined && hasMic ? ' selected' : ''}`} onClick={hasMic ? toggleMic : enableMic} disabled={!joined || (pushToTalkEnabled && hasMic)} aria-pressed={joined && hasMic && !micOn}>
                 <span className="control-icon" aria-hidden="true">{micOn ? '♩' : '♬'}</span><span>{micControlText}</span><b>{micControlState}</b>
+              </button>
+              <button className={`control-button${pushToTalkEnabled ? ' selected push-to-talk-enabled' : ''}`} onClick={togglePushToTalk} disabled={!joined} aria-pressed={pushToTalkEnabled}>
+                <span className="control-icon" aria-hidden="true">⌁</span><span>Push-to-talk</span><b>{pushToTalkEnabled ? 'ON' : 'OFF'}</b>
+              </button>
+              <button
+                ref={pushToTalkButtonRef}
+                type="button"
+                className={`control-button push-to-talk-hold${pushToTalkActive ? ' is-transmitting' : ''}`}
+                disabled={!joined || !hasMic || !pushToTalkEnabled}
+                aria-label="Hold to talk. Keyboard shortcut V."
+                aria-pressed={pushToTalkActive}
+                onPointerDown={(event) => {
+                  if (event.button !== 0) return;
+                  event.preventDefault();
+                  event.currentTarget.setPointerCapture(event.pointerId);
+                  setPushToTalkSource('pointer', true);
+                }}
+                onPointerUp={() => setPushToTalkSource('pointer', false)}
+                onPointerCancel={() => setPushToTalkSource('pointer', false)}
+                onLostPointerCapture={() => setPushToTalkSource('pointer', false)}
+              >
+                <span className="control-icon" aria-hidden="true">◉</span><span>Hold to talk <kbd>V</kbd></span><b>{pushToTalkActive ? 'LIVE' : 'HOLD'}</b>
               </button>
               <button className={`control-button${deafened ? ' selected' : ''}`} onClick={toggleDeafen} disabled={!joined} aria-pressed={deafened}>
                 <span className="control-icon" aria-hidden="true">{deafened ? '◌' : '◖'}</span><span>{deafened ? 'Room audio muted' : 'Room audio'}</span><b>{roomControlState}</b>
@@ -674,7 +760,7 @@ export default function App() {
               {roster.map((p) => {
                 const connectionText = { connecting: 'Audio connecting', connected: 'Audio connected', disconnecting: 'Audio disconnecting', outside: 'Outside audio range' }[p.connection] ?? 'Audio unavailable';
                 const voiceText = p.muted ? 'Microphone muted' : p.speaking ? 'Speaking' : 'Microphone on';
-                return <li key={p.id}><span className="dot" style={{ background: p.color }}><AvatarPreview avatarId={p.avatarId} /></span><span className="person-name">{p.name}<small className={`connection-status is-${p.connection}`}>{connectionText}</small><small className={`voice-status${p.muted ? ' is-muted' : p.speaking ? ' is-speaking' : ''}`}>{voiceText}</small><div className="person-volume"><label htmlFor={`volume-${p.id}`}>Volume</label><b>{Math.round(p.volume * 100)}%</b><input id={`volume-${p.id}`} type="range" min="0" max="100" value={Math.round(p.volume * 100)} aria-label={`Volume for ${p.name}`} onChange={(event) => changePeerVolume(p.id, Number(event.target.value))} /><button type="button" className={`person-mute${p.locallyMuted ? ' is-muted' : ''}`} aria-label={`${p.locallyMuted ? 'Unmute' : 'Mute'} ${p.name} locally`} aria-pressed={p.locallyMuted} onClick={() => togglePeerMute(p.id)}>{p.locallyMuted ? 'Unmute' : 'Mute'}</button></div></span><span className="online-dot" /></li>;
+                return <li key={p.id}><span className="dot" style={{ background: p.color }}><AvatarPreview avatarId={p.avatarId} /></span><span className="person-name">{p.name}<span className="participant-states"><small className={`participant-state proximity-status${p.nearby ? ' is-nearby' : ' is-away'}`}><i aria-hidden="true" />{p.nearby ? 'Nearby' : 'Away'}</small><small className={`participant-state voice-status${p.muted ? ' is-muted' : p.speaking ? ' is-speaking' : ''}`}><i aria-hidden="true" />{voiceText}</small></span><small className={`connection-status is-${p.connection}`}>{connectionText}</small><div className="person-volume"><label htmlFor={`volume-${p.id}`}>Volume</label><b>{Math.round(p.volume * 100)}%</b><input id={`volume-${p.id}`} type="range" min="0" max="100" value={Math.round(p.volume * 100)} aria-label={`Volume for ${p.name}`} onChange={(event) => changePeerVolume(p.id, Number(event.target.value))} /><button type="button" className={`person-mute${p.locallyMuted ? ' is-muted' : ''}`} aria-label={`${p.locallyMuted ? 'Unmute' : 'Mute'} ${p.name} locally`} aria-pressed={p.locallyMuted} onClick={() => togglePeerMute(p.id)}>{p.locallyMuted ? 'Unmute' : 'Mute'}</button></div></span><span className="online-dot" /></li>;
               })}
               {!joined && <li className="empty-roster">Join the room to meet your team.</li>}
               {joined && roster.length === 0 && <li className="empty-roster">You’re the first one here. Invite your team!</li>}
