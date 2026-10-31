@@ -171,11 +171,15 @@ export function attachRealtime(io, { store, layouts }) {
       }
     });
 
-    socket.on('chat:send', ({ text } = {}) => {
+    socket.on('chat:send', ({ text } = {}, acknowledge) => {
+      const reply = typeof acknowledge === 'function' ? acknowledge : () => {};
       const { roomId, userId, displayName } = socket.data;
       const message = typeof text === 'string' ? text.trim() : '';
       const now = Date.now();
-      if (!roomId || !userId || !message || message.length > 500 || now - socket.data.lastChatAt < 600) return;
+      if (!roomId || !userId) return reply({ ok: false, error: 'Join the office before sending a message.' });
+      if (!message) return reply({ ok: false, error: 'Type a message before sending.' });
+      if (message.length > 500) return reply({ ok: false, error: 'Messages must be 500 characters or fewer.' });
+      if (now - socket.data.lastChatAt < 600) return reply({ ok: false, error: 'Please wait a moment before sending another message.' });
       socket.data.lastChatAt = now;
       io.to(roomId).emit('chat:event', {
         id: `${socket.id}:${now}`,
@@ -185,6 +189,7 @@ export function attachRealtime(io, { store, layouts }) {
         text: message,
         createdAt: now,
       });
+      reply({ ok: true });
     });
 
     socket.on('reaction:send', ({ reaction } = {}) => {

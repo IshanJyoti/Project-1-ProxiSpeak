@@ -107,10 +107,13 @@ kbd { padding: 3px 5px; border: 1px solid #e4e9e5; border-radius: 4px; backgroun
 .reaction-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 9px 0; }
 .reaction-button { width: 34px; height: 32px; display: grid; place-items: center; padding: 0; border-color: #e8ece8; border-radius: 8px; background: #fff; font-size: 16px; }
 .reaction-button:hover:not(:disabled) { background: #f0faf5; }
+.chat-compose-area { display: flex; flex-direction: column; gap: 5px; }
 .chat-compose { display: flex; gap: 8px; }
 .chat-compose input { min-width: 0; flex: 1; padding: 10px 12px; border: 1px solid #e0e7e2; border-radius: 9px; outline: none; color: var(--ink); font-size: 11px; }
 .chat-compose input:focus { border-color: #71bda0; box-shadow: 0 0 0 3px #e6f5ed; }
 .chat-compose input:disabled { background: #f8faf8; }
+.chat-counter { align-self: flex-end; color: #8b9792; font-size: 9px; font-variant-numeric: tabular-nums; }
+.chat-send-error { margin: 0; color: #b3261e; font-size: 10px; line-height: 1.4; }
 .chat-send { min-width: 66px; padding: 0 13px; border-color: #16866c; background: #16866c; color: #fff; font-size: 10px; }
 .chat-send:hover:not(:disabled) { border-color: #0c745d; background: #0f795f; }
 

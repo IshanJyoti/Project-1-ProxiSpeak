@@ -9,6 +9,7 @@ import { WORLD, HEAR_RADIUS, HEAR_HYSTERESIS, HEAR_RADIUS_MIN, HEAR_RADIUS_MAX, 
 import { AVATAR_CHOICES, AVATAR_IDS, DEFAULT_AVATAR_ID, avatarById } from '../../shared/avatars.js';
 
 const ROOM_ID = 'main-office';
+const MAX_CHAT_MESSAGE_LENGTH = 500;
 const ACTIVE_SESSION_KEY = 'proxispeak-active-session';
 const AVATAR_PREFERENCE_KEY = 'proxispeak-avatar-id';
 const MICROPHONE_PREFERENCE_KEY = 'proxispeak-microphone-id';
@@ -106,6 +107,8 @@ export default function App() {
   const [roster, setRoster] = useState([]);
   const [chatEvents, setChatEvents] = useState([]);
   const [chatDraft, setChatDraft] = useState('');
+  const [chatError, setChatError] = useState('');
+  const [chatSending, setChatSending] = useState(false);
   const [nearby, setNearby] = useState(0);
   const [fps, setFps] = useState(0);
   const [hasMic, setHasMic] = useState(false);
@@ -570,9 +573,26 @@ export default function App() {
   const sendChat = (event) => {
     event.preventDefault();
     const text = chatDraft.trim();
-    if (!text || !joined) return;
-    sessionRef.current?.socket.emit('chat:send', { text });
-    setChatDraft('');
+    if (!text || text.length > MAX_CHAT_MESSAGE_LENGTH || !joined || chatSending) return;
+    const socket = sessionRef.current?.socket;
+    if (!socket?.connected) {
+      setChatError('You are disconnected. Reconnect before sending your message.');
+      return;
+    }
+    setChatError('');
+    setChatSending(true);
+    socket.timeout(5000).emit('chat:send', { text }, (timeoutError, result) => {
+      setChatSending(false);
+      if (timeoutError) {
+        setChatError('Could not confirm your message was sent. Check your connection and try again.');
+        return;
+      }
+      if (!result?.ok) {
+        setChatError(result?.error || 'Your message could not be sent. Please try again.');
+        return;
+      }
+      setChatDraft('');
+    });
   };
   const sendReaction = (reaction) => {
     sessionRef.current?.socket.emit('reaction:send', { reaction });
@@ -665,7 +685,7 @@ export default function App() {
               <span className="chat-presence">{joined ? 'Room-wide' : 'Join to chat'}</span>
             </div>
             <div className="chat-feed" role="log" aria-live="polite" aria-relevant="additions">
-              {chatEvents.length === 0 ? <p className="chat-empty">Messages and reactions from the office will appear here.</p> : chatEvents.map((event) => {
+              {chatEvents.length === 0 ? <p className="chat-empty">{joined ? 'No messages yet. Send a message or quick reaction to start the conversation.' : 'Join the office to see new messages and reactions.'}</p> : chatEvents.map((event) => {
                 const sentAt = Number.isFinite(event.createdAt) ? new Date(event.createdAt) : null;
                 return (
                   <div className={`chat-event${event.type === 'reaction' ? ' reaction-event' : ''}`} key={event.id}>
@@ -679,10 +699,27 @@ export default function App() {
             <div className="reaction-row" aria-label="Quick reactions">
               {QUICK_REACTIONS.map((reaction) => <button key={reaction} type="button" className="reaction-button" onClick={() => sendReaction(reaction)} disabled={!joined} aria-label={`Send ${reaction} reaction`}>{reaction}</button>)}
             </div>
-            <form className="chat-compose" onSubmit={sendChat}>
-              <input aria-label="Write a message" value={chatDraft} maxLength={500} onChange={(event) => setChatDraft(event.target.value)} placeholder={joined ? 'Write a message…' : 'Join the office to send a message'} disabled={!joined} />
-              <button type="submit" className="chat-send" disabled={!joined || !chatDraft.trim()} aria-label="Send message">Send</button>
-            </form>
+            <div className="chat-compose-area">
+              <form className="chat-compose" onSubmit={sendChat}>
+                <input
+                  aria-label="Write a message"
+                  aria-describedby={chatError ? 'chat-message-counter chat-send-error' : 'chat-message-counter'}
+                  value={chatDraft}
+                  maxLength={MAX_CHAT_MESSAGE_LENGTH}
+                  onChange={(event) => {
+                    setChatDraft(event.target.value.slice(0, MAX_CHAT_MESSAGE_LENGTH));
+                    setChatError('');
+                  }}
+                  placeholder={joined ? 'Write a message…' : 'Join the office to send a message'}
+                  disabled={!joined || chatSending}
+                />
+                <button type="submit" className="chat-send" disabled={!joined || chatSending || !chatDraft.trim()} aria-label="Send message">{chatSending ? 'Sending…' : 'Send'}</button>
+              </form>
+              <span className="chat-counter" id="chat-message-counter">
+                {chatDraft.length} / {MAX_CHAT_MESSAGE_LENGTH} characters
+              </span>
+              {chatError && <p className="chat-send-error" id="chat-send-error" role="alert">{chatError} Your draft is still here; you can try again.</p>}
+            </div>
           </section>
         </section>
 

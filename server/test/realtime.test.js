@@ -125,7 +125,9 @@ test('chat messages and quick reactions are broadcast to the room with validated
   await join(a, 'user-a', 100, 300);
   await join(b, 'user-b', 500, 300);
 
-  a.h['chat:send']({ text: '  Hello team  ' });
+  let sendResult;
+  a.h['chat:send']({ text: '  Hello team  ' }, (result) => { sendResult = result; });
+  assert.deepEqual(sendResult, { ok: true });
   let chatEvent = events(io, 'chat:event').at(-1);
   assert.equal(chatEvent.room, 'main-office');
   assert.equal(chatEvent.data.text, 'Hello team');
@@ -138,7 +140,8 @@ test('chat messages and quick reactions are broadcast to the room with validated
   assert.equal(chatEvent.data.type, 'reaction');
 
   const eventCount = events(io, 'chat:event').length;
-  a.h['chat:send']({ text: 'x'.repeat(501) });
+  a.h['chat:send']({ text: 'x'.repeat(501) }, (result) => { sendResult = result; });
+  assert.deepEqual(sendResult, { ok: false, error: 'Messages must be 500 characters or fewer.' });
   b.h['reaction:send']({ reaction: '<script>' });
   assert.equal(events(io, 'chat:event').length, eventCount);
 });
