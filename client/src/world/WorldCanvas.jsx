@@ -34,12 +34,12 @@ function roundedRectPath(ctx, x, y, width, height, radius) {
   ctx.closePath();
 }
 
-export default function WorldCanvas({ world, mixer, hearRadius, onMove, onFrame, onStats, onDebugChange }) {
+export default function WorldCanvas({ world, mixer, hearRadius, zoom, onZoomChange, onMove, onFrame, onStats, onDebugChange }) {
   const canvasRef = useRef(null);
   // Keep the animation loop pointed at current props without restarting it
   // whenever audio state or a callback changes.
-  const live = useRef({ mixer, hearRadius, onMove, onFrame, onStats, onDebugChange });
-  live.current = { mixer, hearRadius, onMove, onFrame, onStats, onDebugChange };
+  const live = useRef({ mixer, hearRadius, zoom, onZoomChange, onMove, onFrame, onStats, onDebugChange });
+  live.current = { mixer, hearRadius, zoom, onZoomChange, onMove, onFrame, onStats, onDebugChange };
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -73,13 +73,29 @@ export default function WorldCanvas({ world, mixer, hearRadius, onMove, onFrame,
     const onBlur = () => world.keys.clear();
     const onClick = (e) => {
       const r = canvas.getBoundingClientRect();
-      // Convert the click's screen position into the world's map coordinates.
-      world.target = { x: ((e.clientX - r.left) / r.width) * WORLD.width, y: ((e.clientY - r.top) / r.height) * WORLD.height };
+      const currentZoom = live.current.zoom;
+      const viewX = cameraOffset(world.self.x, currentZoom, WORLD.width);
+      const viewY = cameraOffset(world.self.y, currentZoom, WORLD.height);
+      world.target = {
+        x: viewX + ((e.clientX - r.left) / r.width) * (WORLD.width / currentZoom),
+        y: viewY + ((e.clientY - r.top) / r.height) * (WORLD.height / currentZoom),
+      };
+    };
+    const onWheel = (e) => {
+      const currentZoom = live.current.zoom;
+      if (e.deltaY < 0 && currentZoom < 2.5) {
+        e.preventDefault();
+        live.current.onZoomChange?.(1);
+      } else if (e.deltaY > 0 && currentZoom > 1) {
+        e.preventDefault();
+        live.current.onZoomChange?.(-1);
+      }
     };
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
     window.addEventListener('blur', onBlur);
     canvas.addEventListener('click', onClick);
+    canvas.addEventListener('wheel', onWheel, { passive: false });
 
     // --- loop ------------------------------------------------------------
     let raf = 0;
@@ -107,7 +123,7 @@ export default function WorldCanvas({ world, mixer, hearRadius, onMove, onFrame,
       }
       // Let the parent update per-frame behavior, then redraw the complete map.
       live.current.onFrame?.(dt);
-      draw(ctx, dpr, world, bg, live.current.mixer, live.current.hearRadius);
+      draw(ctx, dpr, world, bg, live.current.mixer, live.current.hearRadius, live.current.zoom);
 
       // Report an approximate frame rate twice per second, not on every frame.
       if (now - statsAt >= 500) {
@@ -126,16 +142,24 @@ export default function WorldCanvas({ world, mixer, hearRadius, onMove, onFrame,
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
       canvas.removeEventListener('click', onClick);
+      canvas.removeEventListener('wheel', onWheel);
     };
   }, [world]);
 
   return <canvas ref={canvasRef} className="world-canvas" aria-label="Virtual office map. Click to walk, or use WASD / arrow keys." />;
 }
 
-function draw(ctx, dpr, world, bg, mixer, hearRadius) {
+function cameraOffset(position, zoom, dimension) {
+  return Math.max(0, Math.min(dimension - dimension / zoom, position - dimension / (2 * zoom)));
+}
+
+function draw(ctx, dpr, world, bg, mixer, hearRadius, zoom) {
   // Reset canvas scaling and clear the previous frame before painting this one.
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, WORLD.width, WORLD.height);
+  const viewX = cameraOffset(world.self.x, zoom, WORLD.width);
+  const viewY = cameraOffset(world.self.y, zoom, WORLD.height);
+  ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, -viewX * dpr * zoom, -viewY * dpr * zoom);
   if (bg.complete && bg.naturalWidth) ctx.drawImage(bg, 0, 0, WORLD.width, WORLD.height);
   else { ctx.fillStyle = '#f1f1ef'; ctx.fillRect(0, 0, WORLD.width, WORLD.height); }
 

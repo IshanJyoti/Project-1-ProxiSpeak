@@ -10,6 +10,9 @@ import { AVATAR_CHOICES, AVATAR_IDS, DEFAULT_AVATAR_ID, avatarById } from '../..
 
 const ROOM_ID = 'main-office';
 const MAX_CHAT_MESSAGE_LENGTH = 500;
+const MAP_ZOOM_MIN = 1;
+const MAP_ZOOM_MAX = 2.5;
+const MAP_ZOOM_STEP = 0.25;
 const ACTIVE_SESSION_KEY = 'proxispeak-active-session';
 const AVATAR_PREFERENCE_KEY = 'proxispeak-avatar-id';
 const MICROPHONE_PREFERENCE_KEY = 'proxispeak-microphone-id';
@@ -117,6 +120,7 @@ export default function App() {
   const [switchingMicrophone, setSwitchingMicrophone] = useState(false);
   const [mixer, setMixer] = useState(null);
   const [showObstacles, setShowObstacles] = useState(false);
+  const [mapZoom, setMapZoom] = useState(MAP_ZOOM_MIN);
   const [hearRadius, setHearRadius] = useState(HEAR_RADIUS);
   const [rangeDraft, setRangeDraft] = useState(HEAR_RADIUS);
   const [savingRange, setSavingRange] = useState(false);
@@ -570,6 +574,9 @@ export default function App() {
     world.showDebug = !world.showDebug;
     setShowObstacles(world.showDebug);
   };
+  const changeMapZoom = (direction) => {
+    setMapZoom((current) => Math.min(MAP_ZOOM_MAX, Math.max(MAP_ZOOM_MIN, Number((current + direction * MAP_ZOOM_STEP).toFixed(2)))));
+  };
   const sendChat = (event) => {
     event.preventDefault();
     const text = chatDraft.trim();
@@ -636,7 +643,7 @@ export default function App() {
             </button>
           </div>
           <div className="map-frame">
-            <WorldCanvas world={world} mixer={mixer} hearRadius={hearRadius} onMove={onMove} onFrame={onFrame} onStats={(s) => setFps(s.fps)} onDebugChange={setShowObstacles} />
+            <WorldCanvas world={world} mixer={mixer} hearRadius={hearRadius} zoom={mapZoom} onZoomChange={changeMapZoom} onMove={onMove} onFrame={onFrame} onStats={(s) => setFps(s.fps)} onDebugChange={setShowObstacles} />
             {!joined && (
               <div className="overlay">
                 <div className="card">
@@ -676,6 +683,12 @@ export default function App() {
                 </div>
               </div>
             )}
+            <div className="map-zoom-controls" role="group" aria-label="Map zoom controls">
+              <button type="button" aria-label="Zoom out" onClick={() => changeMapZoom(-1)} disabled={mapZoom <= MAP_ZOOM_MIN}>−</button>
+              <output aria-live="polite">{Math.round(mapZoom * 100)}%</output>
+              <button type="button" aria-label="Zoom in" onClick={() => changeMapZoom(1)} disabled={mapZoom >= MAP_ZOOM_MAX}>+</button>
+              <button type="button" className="map-zoom-reset" onClick={() => setMapZoom(MAP_ZOOM_MIN)} disabled={mapZoom === MAP_ZOOM_MIN}>Reset</button>
+            </div>
             <div className="map-corner-label"><span>⌖</span> MAIN OFFICE <i /> 1000 × 540</div>
           </div>
           <div className="hint"><span className="hint-icon">↖</span><span><b>Click anywhere</b> to walk</span><span className="hint-divider" /><span><b>WASD</b> or arrow keys to move</span><kbd>SHIFT</kbd><span>to run</span><span className="hint-divider" /><span><kbd>O</kbd> layout</span></div>

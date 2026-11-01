@@ -83,6 +83,13 @@ button { color: inherit; }
 .map-action:hover, .map-action.is-active { border-color: #a8d8c6; background: #f0faf5; color: #14785f; }
 .map-frame { position: relative; overflow: hidden; border: 1px solid #e4e9e4; border-radius: 13px; background: #f0f1ec; box-shadow: inset 0 1px 4px rgba(34, 50, 41, .06); }
 .world-canvas { display: block; width: 100%; aspect-ratio: 1000 / 540; cursor: crosshair; }
+.map-zoom-controls { position: absolute; left: 12px; bottom: 12px; display: flex; align-items: center; gap: 5px; padding: 5px; border: 1px solid rgba(255, 255, 255, .75); border-radius: 8px; background: rgba(255, 255, 255, .92); box-shadow: 0 3px 12px rgba(32, 46, 39, .1); }
+.map-zoom-controls button { min-width: 27px; height: 27px; padding: 0 7px; border: 1px solid #e4e9e5; border-radius: 5px; background: #fff; color: #53635e; font: 700 15px 'DM Sans', sans-serif; cursor: pointer; }
+.map-zoom-controls button:hover:not(:disabled) { border-color: #a8d8c6; background: #f0faf5; color: #14785f; }
+.map-zoom-controls button:disabled { color: #b7c0bc; cursor: default; }
+.map-zoom-controls button:focus-visible { outline: 2px solid #16866c; outline-offset: 2px; }
+.map-zoom-controls output { min-width: 38px; color: #687772; font-size: 9px; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; }
+.map-zoom-controls .map-zoom-reset { min-width: auto; margin-left: 2px; font-size: 9px; }
 .map-corner-label { position: absolute; right: 12px; bottom: 12px; display: flex; align-items: center; gap: 7px; padding: 7px 10px; border: 1px solid rgba(255, 255, 255, .65); border-radius: 7px; background: rgba(255, 255, 255, .88); color: #687772; font-size: 8px; font-weight: 700; letter-spacing: .8px; box-shadow: 0 3px 12px rgba(32, 46, 39, .08); }
 .map-corner-label > span { color: var(--teal); font-size: 12px; }
 .map-corner-label > i { width: 3px; height: 3px; margin: 0 2px; border-radius: 50%; background: #b8c1bd; }
@@ -253,6 +260,10 @@ button.primary:hover:not(:disabled) { border-color: #0c745d; background: #0f795f
   .map-action { padding: 8px; font-size: 9px; }
   .map-action > span { font-size: 13px; }
   .map-frame { border-radius: 9px; }
+  .map-zoom-controls { left: 6px; bottom: 6px; gap: 3px; padding: 3px; }
+  .map-zoom-controls button { min-width: 23px; height: 23px; padding: 0 5px; font-size: 13px; }
+  .map-zoom-controls output { min-width: 32px; font-size: 8px; }
+  .map-zoom-controls .map-zoom-reset { font-size: 8px; }
   .map-corner-label { right: 6px; bottom: 6px; gap: 4px; padding: 5px 6px; font-size: 6px; }
   .map-corner-label > span { font-size: 9px; }
   .hint { gap: 5px; font-size: 9px; }
