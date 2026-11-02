@@ -16,6 +16,7 @@ const MAP_ZOOM_STEP = 0.25;
 const ACTIVE_SESSION_KEY = 'proxispeak-active-session';
 const AVATAR_PREFERENCE_KEY = 'proxispeak-avatar-id';
 const MICROPHONE_PREFERENCE_KEY = 'proxispeak-microphone-id';
+const THEME_PREFERENCE_KEY = 'proxispeak-theme';
 const QUICK_REACTIONS = [
   '👍', '❤️', '😂', '👀', '🎉', '🙌',
   '🔥', '💯', '👏', '😍', '🤔', '😎', '🚀', '☕', '👋', '🙏',
@@ -127,7 +128,13 @@ export default function App() {
   const [rangeError, setRangeError] = useState('');
   const [needsAdminToken, setNeedsAdminToken] = useState(false);
   const [adminToken, setAdminToken] = useState('');
+  const [theme, setTheme] = useState(() => (localStorage.getItem(THEME_PREFERENCE_KEY) === 'dark' ? 'dark' : 'light'));
   hearRadiusRef.current = hearRadius;
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem(THEME_PREFERENCE_KEY, theme);
+  }, [theme]);
 
   useEffect(() => {
     let active = true;
@@ -626,6 +633,17 @@ export default function App() {
           <div><h1>proxi<span>speak</span></h1><small>THE SPATIAL OFFICE</small></div>
         </div>
         <div className="topbar-right">
+          <button
+            type="button"
+            className="theme-toggle"
+            role="switch"
+            aria-checked={theme === 'dark'}
+            aria-label="Dark mode"
+            onClick={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}
+          >
+            <span className="theme-track"><span className="theme-thumb" aria-hidden="true">{theme === 'dark' ? '☾' : '☀'}</span></span>
+            <span className="theme-label">{theme === 'dark' ? 'Dark' : 'Light'}</span>
+          </button>
           <div className="room-chip"><span className="room-dot" />MAIN OFFICE</div>
           <div className="status"><i className={`led ${network}`} />{statusText}{joined && network === 'reconnecting' && <button type="button" className="retry-connection" onClick={retryConnection}>Retry</button>}{joined && <span className="fps">{fps} FPS</span>}</div>
         </div>
