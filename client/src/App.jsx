@@ -45,10 +45,10 @@ async function microphoneErrorMessage(error) {
       if (permissionState === 'granted') {
         return 'Edge reports microphone permission as allowed, but Windows or the website host blocked capture. Check Windows microphone privacy, close apps using the mic, and open the HTTPS link directly in Edge (not an embedded preview).';
       }
-      return 'Edge blocked microphone access. Allow Microphone in the site permissions beside the address bar, then click Enable microphone in Quick controls.';
+      return 'Edge blocked microphone access. Allow Microphone in the site permissions beside the address bar, then click Enable microphone in the control bar.';
     case 'NotFoundError':
     case 'DevicesNotFoundError':
-      return 'No microphone was found. Connect or enable a microphone, then click Enable microphone in Quick controls.';
+      return 'No microphone was found. Connect or enable a microphone, then click Enable microphone in the control bar.';
     case 'NotReadableError':
     case 'TrackStartError':
       return 'The microphone is busy or unavailable to Windows. Close apps using it and check Windows microphone privacy settings, then retry.';
@@ -613,7 +613,7 @@ export default function App() {
   };
 
   const statusText = { offline: 'Not in the office', connecting: 'Connecting…', connected: 'Live', reconnecting: 'Reconnecting…' }[network];
-  const micControlText = !joined ? 'Microphone' : hasMic ? (micOn ? 'Microphone' : 'Microphone muted') : 'Enable microphone';
+  const micControlText = !joined ? 'Microphone' : hasMic ? (micOn ? 'Microphone' : 'Mic muted') : 'Enable mic';
   const micControlState = !joined ? 'READY' : hasMic ? (micOn ? 'ON' : 'OFF') : 'OFF';
   const roomControlState = !joined ? 'READY' : deafened ? 'OFF' : 'ON';
   const localVoiceStatus = !hasMic || world.selfMuted ? 'Microphone muted' : 'Microphone on';
@@ -738,52 +738,6 @@ export default function App() {
 
         <aside className="side">
           <section className="panel">
-            <div className="panel-heading"><div><span className="eyebrow">AUDIO</span><h3>Quick controls</h3></div><span className={`audio-state${joined ? ' active' : ''}`}><i />{joined ? 'ACTIVE' : 'IDLE'}</span></div>
-            <div className="control-stack">
-              <button className={`control-button${!micOn && joined && hasMic ? ' selected' : ''}`} onClick={hasMic ? toggleMic : enableMic} disabled={!joined || (pushToTalkEnabled && hasMic)} aria-pressed={joined && hasMic && !micOn}>
-                <span className="control-icon" aria-hidden="true">{micOn ? '♩' : '♬'}</span><span>{micControlText}</span><b>{micControlState}</b>
-              </button>
-              <button className={`control-button${pushToTalkEnabled ? ' selected push-to-talk-enabled' : ''}`} onClick={togglePushToTalk} disabled={!joined} aria-pressed={pushToTalkEnabled}>
-                <span className="control-icon" aria-hidden="true">⌁</span><span>Push-to-talk</span><b>{pushToTalkEnabled ? 'ON' : 'OFF'}</b>
-              </button>
-              <button
-                ref={pushToTalkButtonRef}
-                type="button"
-                className={`control-button push-to-talk-hold${pushToTalkActive ? ' is-transmitting' : ''}`}
-                disabled={!joined || !hasMic || !pushToTalkEnabled}
-                aria-label="Hold to talk. Keyboard shortcut V."
-                aria-pressed={pushToTalkActive}
-                onPointerDown={(event) => {
-                  if (event.button !== 0) return;
-                  event.preventDefault();
-                  event.currentTarget.setPointerCapture(event.pointerId);
-                  setPushToTalkSource('pointer', true);
-                }}
-                onPointerUp={() => setPushToTalkSource('pointer', false)}
-                onPointerCancel={() => setPushToTalkSource('pointer', false)}
-                onLostPointerCapture={() => setPushToTalkSource('pointer', false)}
-              >
-                <span className="control-icon" aria-hidden="true">◉</span><span>Hold to talk <kbd>V</kbd></span><b>{pushToTalkActive ? 'LIVE' : 'HOLD'}</b>
-              </button>
-              <button className={`control-button${deafened ? ' selected' : ''}`} onClick={toggleDeafen} disabled={!joined} aria-pressed={deafened}>
-                <span className="control-icon" aria-hidden="true">{deafened ? '◌' : '◖'}</span><span>{deafened ? 'Room audio muted' : 'Room audio'}</span><b>{roomControlState}</b>
-              </button>
-            </div>
-            <label className="microphone-select">
-              <span>Microphone input</span>
-              <select aria-label="Microphone input" value={selectedMicrophoneId} onChange={chooseMicrophone} disabled={switchingMicrophone || audioInputs.length === 0}>
-                <option value="">System default</option>
-                {audioInputs.map((device, index) => (
-                  <option key={device.deviceId} value={device.deviceId}>{device.label || `Microphone ${index + 1}`}</option>
-                ))}
-              </select>
-              {switchingMicrophone && <small>Switching microphone…</small>}
-            </label>
-            <label className="vol"><span>Room volume</span><b>{volume}%</b><input aria-label="Room volume" type="range" min="0" max="100" value={volume} onChange={(e) => changeVolume(Number(e.target.value))} /></label>
-            <button className="leave" onClick={leave} disabled={!joined}><span aria-hidden="true">↗</span> Leave office</button>
-            {joined && error && <p className="error" role="alert">{error}</p>}
-          </section>
-          <section className="panel">
             <div className="panel-heading"><div><span className="eyebrow">PROXIMITY AUDIO</span><h3>Within earshot</h3></div><span className="count-badge">{nearby}</span></div>
             <div className="range-meter"><span style={{ width: `${Math.min(100, (nearby / Math.max(roster.length, 1)) * 100)}%` }} /></div>
             <p className="muted">{nearby ? `${nearby} ${nearby === 1 ? 'teammate is' : 'teammates are'} close enough to hear.` : 'Walk closer to a teammate to hear their conversation.'}</p>
@@ -818,6 +772,54 @@ export default function App() {
           </section>
         </aside>
       </main>
+
+      <footer className="dock" aria-label="Audio controls">
+        <div className="dock-inner">
+          {joined && error && <p className="error" role="alert">{error}</p>}
+          <div className="control-stack">
+            <button className={`control-button${!micOn && joined && hasMic ? ' selected' : ''}`} onClick={hasMic ? toggleMic : enableMic} disabled={!joined || (pushToTalkEnabled && hasMic)} aria-pressed={joined && hasMic && !micOn}>
+              <span className="control-icon" aria-hidden="true">{micOn ? '♩' : '♬'}</span><span>{micControlText}</span><b>{micControlState}</b>
+            </button>
+            <button className={`control-button${pushToTalkEnabled ? ' push-to-talk-enabled' : ''}`} onClick={togglePushToTalk} disabled={!joined} aria-pressed={pushToTalkEnabled}>
+              <span className="control-icon" aria-hidden="true">⌁</span><span>Push-to-talk</span><b>{pushToTalkEnabled ? 'ON' : 'OFF'}</b>
+            </button>
+            <button
+              ref={pushToTalkButtonRef}
+              type="button"
+              className={`control-button push-to-talk-hold${pushToTalkActive ? ' is-transmitting' : ''}`}
+              disabled={!joined || !hasMic || !pushToTalkEnabled}
+              aria-label="Hold to talk. Keyboard shortcut V."
+              aria-pressed={pushToTalkActive}
+              onPointerDown={(event) => {
+                if (event.button !== 0) return;
+                event.preventDefault();
+                event.currentTarget.setPointerCapture(event.pointerId);
+                setPushToTalkSource('pointer', true);
+              }}
+              onPointerUp={() => setPushToTalkSource('pointer', false)}
+              onPointerCancel={() => setPushToTalkSource('pointer', false)}
+              onLostPointerCapture={() => setPushToTalkSource('pointer', false)}
+            >
+              <span className="control-icon" aria-hidden="true">◉</span><span>Hold <kbd>V</kbd></span><b>{pushToTalkActive ? 'LIVE' : 'HOLD'}</b>
+            </button>
+            <button className={`control-button${deafened ? ' selected' : ''}`} onClick={toggleDeafen} disabled={!joined} aria-pressed={deafened}>
+              <span className="control-icon" aria-hidden="true">{deafened ? '◌' : '◖'}</span><span>{deafened ? 'Room muted' : 'Room audio'}</span><b>{roomControlState}</b>
+            </button>
+          </div>
+          <label className="dock-field microphone-select">
+            <span>Microphone input</span>
+            <select aria-label="Microphone input" value={selectedMicrophoneId} onChange={chooseMicrophone} disabled={switchingMicrophone || audioInputs.length === 0}>
+              <option value="">System default</option>
+              {audioInputs.map((device, index) => (
+                <option key={device.deviceId} value={device.deviceId}>{device.label || `Microphone ${index + 1}`}</option>
+              ))}
+            </select>
+            {switchingMicrophone && <small>Switching microphone…</small>}
+          </label>
+          <label className="dock-field vol"><span>Room volume</span><b>{volume}%</b><input aria-label="Room volume" type="range" min="0" max="100" value={volume} onChange={(e) => changeVolume(Number(e.target.value))} /></label>
+          <button className="leave" onClick={leave} disabled={!joined}><span aria-hidden="true">↗</span> Leave office</button>
+        </div>
+      </footer>
     </div>
   );
 }
