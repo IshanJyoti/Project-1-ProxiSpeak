@@ -1,0 +1,17 @@
+{
+  "name": "proxispeak",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "install:all": "npm --prefix server install && npm --prefix client install",
+    "dev": "concurrently -k -n server,client -c green,blue \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client run dev",
+    "test": "npm --prefix server test",
+    "bench": "npm --prefix server run bench"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.6"
+  }
+}
