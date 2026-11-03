@@ -26,6 +26,11 @@ npm run dev
 
 Open <http://localhost:5173>. The API listens on <http://localhost:8080>; Vite forwards
 `/api` requests to it. Press Ctrl+C in the terminal to stop both processes.
+If the server reports that port 8080 is already in use, stop the other running
+ProxiSpeak server first. Vite may choose another client port (such as 5174), but
+the API still needs to be available on port 8080.
+The office background image is `client/public/room.png`; Vite serves image
+changes without restarting the API server.
 
 The app runs without a database using an in-memory store. This is suitable for local
 development, but presence and saved room layouts will not persist when the server restarts.

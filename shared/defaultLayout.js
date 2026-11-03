@@ -1,12 +1,15 @@
-// Obstacles traced from room.png (500x270 source image), scaled x2 into the 1000x540 world.
+// Obstacles traced from room.png (500x270 source image), scaled into the 1000x560 world.
 // walls absorb most sound (transmit 0.12); furniture absorbs some (0.6).
+import { WORLD } from './geo.js';
+
 const S = 2;
+const SY = WORLD.height / 540;
 const W = 0.12;
 const F = 0.6;
-const r = (x, y, w, h, kind, transmit) => ({ x: x * S, y: y * S, w: w * S, h: h * S, kind, transmit });
+const r = (x, y, w, h, kind, transmit) => ({ x: x * S, y: y * S * SY, w: w * S, h: h * S * SY, kind, transmit });
 
 export const DEFAULT_ROOM_ID = 'main-office';
-export const SPAWN = { x: 200, y: 300 };
+export const SPAWN = { x: 200, y: 300 * SY };
 
 export const defaultObstacles = [
   // outer walls (bottom wall has the double-door gap at x 32..92)
