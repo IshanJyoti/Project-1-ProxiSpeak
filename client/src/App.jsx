@@ -707,7 +707,7 @@ export default function App() {
               <button type="button" aria-label="Zoom in" onClick={() => changeMapZoom(1)} disabled={mapZoom >= MAP_ZOOM_MAX}>+</button>
               <button type="button" className="map-zoom-reset" onClick={() => setMapZoom(MAP_ZOOM_MIN)} disabled={mapZoom === MAP_ZOOM_MIN}>Reset</button>
             </div>
-            <div className="map-corner-label"><span>⌖</span> MAIN OFFICE <i /> 1000 × 540</div>
+            <div className="map-corner-label"><span>⌖</span> MAIN OFFICE <i /> {WORLD.width} × {WORLD.height}</div>
           </div>
           <div className="hint"><span className="hint-icon">↖</span><span><b>Click anywhere</b> to walk</span><span className="hint-divider" /><span><b>WASD</b> or arrow keys to move</span><kbd>SHIFT</kbd><span>to run</span><span className="hint-divider" /><span><kbd>O</kbd> layout</span></div>
           <section className="chat-panel" aria-label="Team chat">

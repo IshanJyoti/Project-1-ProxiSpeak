@@ -96,6 +96,29 @@ app.put('/api/rooms/:roomId/layout', async (req, res) => {
 });
 
 httpServer.listen(config.port, () => console.log(`[server] listening on :${config.port}`));
-const shutdown = async () => { io.close(); await store.close(); process.exit(0); };
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+httpServer.on('error', (error) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(`[server] port ${config.port} is already in use; stop the other server before restarting.`);
+  } else {
+    console.error('[server] HTTP server error:', error);
+  }
+  void shutdown()
+    .catch((shutdownError) => console.error('[server] shutdown failed:', shutdownError))
+    .finally(() => { process.exitCode = 1; });
+});
+
+let shutdownPromise;
+function shutdown() {
+  if (!shutdownPromise) {
+    shutdownPromise = new Promise((resolve) => io.close(resolve)).then(() => store.close());
+  }
+  return shutdownPromise;
+}
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.on(signal, () => {
+    void shutdown().catch((error) => {
+      console.error('[server] shutdown failed:', error);
+      process.exitCode = 1;
+    });
+  });
+}

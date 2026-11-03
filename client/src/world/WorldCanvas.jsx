@@ -3,7 +3,7 @@ import { WORLD, HEAR_RADIUS } from '../../../shared/geo.js';
 import { stepSelf, initials } from './world.js';
 import { avatarById } from '../../../shared/avatars.js';
 
-const AVATAR_DISPLAY_RADIUS = 22;
+const AVATAR_DISPLAY_RADIUS = 15;
 const avatarImages = new Map();
 
 function getAvatarImage(avatar) {
@@ -81,21 +81,10 @@ export default function WorldCanvas({ world, mixer, hearRadius, zoom, onZoomChan
         y: viewY + ((e.clientY - r.top) / r.height) * (WORLD.height / currentZoom),
       };
     };
-    const onWheel = (e) => {
-      const currentZoom = live.current.zoom;
-      if (e.deltaY < 0 && currentZoom < 2.5) {
-        e.preventDefault();
-        live.current.onZoomChange?.(1);
-      } else if (e.deltaY > 0 && currentZoom > 1) {
-        e.preventDefault();
-        live.current.onZoomChange?.(-1);
-      }
-    };
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
     window.addEventListener('blur', onBlur);
     canvas.addEventListener('click', onClick);
-    canvas.addEventListener('wheel', onWheel, { passive: false });
 
     // --- loop ------------------------------------------------------------
     let raf = 0;
@@ -123,7 +112,7 @@ export default function WorldCanvas({ world, mixer, hearRadius, zoom, onZoomChan
       }
       // Let the parent update per-frame behavior, then redraw the complete map.
       live.current.onFrame?.(dt);
-      draw(ctx, dpr, world, bg, live.current.mixer, live.current.hearRadius, live.current.zoom);
+      draw(ctx, dpr, world, bg, live.current.mixer, live.current.hearRadius, live.current.zoom, now);
 
       // Report an approximate frame rate twice per second, not on every frame.
       if (now - statsAt >= 500) {
@@ -142,7 +131,6 @@ export default function WorldCanvas({ world, mixer, hearRadius, zoom, onZoomChan
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
       canvas.removeEventListener('click', onClick);
-      canvas.removeEventListener('wheel', onWheel);
     };
   }, [world]);
 
@@ -153,7 +141,7 @@ function cameraOffset(position, zoom, dimension) {
   return Math.max(0, Math.min(dimension - dimension / zoom, position - dimension / (2 * zoom)));
 }
 
-function draw(ctx, dpr, world, bg, mixer, hearRadius, zoom) {
+function draw(ctx, dpr, world, bg, mixer, hearRadius, zoom, now) {
   // Reset canvas scaling and clear the previous frame before painting this one.
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, WORLD.width, WORLD.height);
@@ -181,9 +169,33 @@ function draw(ctx, dpr, world, bg, mixer, hearRadius, zoom) {
   radiusGlow.addColorStop(1, 'rgba(55, 183, 151, .015)');
   ctx.fillStyle = radiusGlow;
   ctx.fill();
-  ctx.setLineDash([6, 6]);
-  ctx.strokeStyle = 'rgba(26, 135, 109, .55)';
-  ctx.lineWidth = 1.5;
+  const sweepAngle = now * 0.0012;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(me.x, me.y, hearRadius ?? HEAR_RADIUS, 0, Math.PI * 2);
+  ctx.clip();
+  ctx.beginPath();
+  ctx.moveTo(me.x, me.y);
+  ctx.arc(me.x, me.y, hearRadius ?? HEAR_RADIUS, sweepAngle - 0.65, sweepAngle);
+  ctx.closePath();
+  const sweepGlow = ctx.createRadialGradient(me.x, me.y, 0, me.x, me.y, hearRadius ?? HEAR_RADIUS);
+  sweepGlow.addColorStop(0, 'rgba(35, 190, 125, .2)');
+  sweepGlow.addColorStop(1, 'rgba(35, 190, 125, .015)');
+  ctx.fillStyle = sweepGlow;
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(me.x, me.y);
+  ctx.lineTo(
+    me.x + Math.cos(sweepAngle) * (hearRadius ?? HEAR_RADIUS),
+    me.y + Math.sin(sweepAngle) * (hearRadius ?? HEAR_RADIUS),
+  );
+  ctx.strokeStyle = 'rgba(28, 158, 105, .62)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.restore();
+  ctx.setLineDash([3, 7]);
+  ctx.strokeStyle = 'rgba(26, 135, 109, .38)';
+  ctx.lineWidth = 1.2;
   ctx.stroke();
   ctx.restore();
 
@@ -214,20 +226,20 @@ function draw(ctx, dpr, world, bg, mixer, hearRadius, zoom) {
     const voiceStatus = p.muted ? 'Muted' : speaking ? 'Speaking' : 'Mic on';
     const connectionText = { connecting: 'Connecting', connected: 'Connected', disconnecting: 'Disconnecting', outside: 'Out of range' }[connection] ?? 'Unavailable';
     ctx.beginPath();
-    ctx.ellipse(p.rx, p.ry + 10, AVATAR_DISPLAY_RADIUS + 4, AVATAR_DISPLAY_RADIUS * 0.62, 0, 0, Math.PI * 2);
+    ctx.ellipse(p.rx, p.ry + 7, AVATAR_DISPLAY_RADIUS + 3, AVATAR_DISPLAY_RADIUS * 0.55, 0, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(31, 42, 53, .23)';
     ctx.fill();
     if (speaking || p.self) {
       ctx.beginPath();
-      ctx.arc(p.rx, p.ry, AVATAR_DISPLAY_RADIUS + (speaking ? 7 : 5), 0, Math.PI * 2);
+      ctx.arc(p.rx, p.ry, AVATAR_DISPLAY_RADIUS + (speaking ? 5 : 4), 0, Math.PI * 2);
       ctx.strokeStyle = speaking ? 'rgba(26, 135, 109, .27)' : 'rgba(255, 255, 255, .82)';
       ctx.lineWidth = 2;
       ctx.stroke();
     }
     ctx.save();
     ctx.shadowColor = 'rgba(20, 34, 46, .26)';
-    ctx.shadowBlur = 8;
-    ctx.shadowOffsetY = 2;
+    ctx.shadowBlur = 6;
+    ctx.shadowOffsetY = 1.5;
     ctx.beginPath();
     ctx.arc(p.rx, p.ry, AVATAR_DISPLAY_RADIUS, 0, Math.PI * 2);
     const avatar = avatarById(p.avatarId);
@@ -246,27 +258,27 @@ function draw(ctx, dpr, world, bg, mixer, hearRadius, zoom) {
     } else if (avatar.emoji) {
       ctx.shadowColor = 'transparent';
       ctx.fillStyle = '#fff';
-      ctx.font = '25px system-ui, sans-serif';
+      ctx.font = '18px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(avatar.emoji, p.rx, p.ry + 0.5);
     } else if (avatar.id === 'initials') {
       ctx.shadowColor = 'transparent';
       ctx.fillStyle = '#fff';
-      ctx.font = '700 15px system-ui, sans-serif';
+      ctx.font = '700 11px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(initials(p.name), p.rx, p.ry + 0.5);
     } else if (!avatar.emoji) {
       ctx.shadowColor = 'transparent';
       ctx.fillStyle = '#fff';
-      ctx.font = '700 15px system-ui, sans-serif';
+      ctx.font = '700 11px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(initials(p.name), p.rx, p.ry + 0.5);
     }
     ctx.restore();
-    ctx.lineWidth = speaking ? 2.5 : 2;
+    ctx.lineWidth = speaking ? 2 : 1.5;
     ctx.strokeStyle = speaking ? '#16866c' : p.self ? '#ffffff' : 'rgba(255, 255, 255, .94)';
     ctx.stroke();
     ctx.font = '700 11px system-ui, sans-serif';
