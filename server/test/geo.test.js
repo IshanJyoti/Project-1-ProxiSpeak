@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { segmentHitsRect, occlusion, attenuation, pan, clusters, validObstacle, validHearRadius, HEAR_RADIUS } from '../../shared/geo.js';
+import { segmentHitsRect, occlusion, attenuation, pan, clusters, validObstacle, validHearRadius, dist, HEAR_RADIUS, HEAR_HYSTERESIS } from '../../shared/geo.js';
 import { defaultObstacles } from '../../shared/defaultLayout.js';
 import { MemoryGeoStore } from '../src/store/memoryStore.js';
 import { diffPeers, Metrics } from '../src/proximity.js';
@@ -26,6 +26,32 @@ test('attenuation falls off with distance and occlusion', () => {
   assert.equal(attenuation(HEAR_RADIUS), 0);
   assert.ok(attenuation(40) > attenuation(80));
   assert.ok(attenuation(60, 0.1) < attenuation(60, 1));
+});
+
+test('Euclidean distance determines inclusive proximity and hysteresis boundaries', () => {
+  const self = { x: 100, y: 100 };
+  const neighbors = [
+    { id: 'edge', x: 160, y: 180 },
+    { id: 'outside', x: 160.01, y: 180 },
+  ].map((user) => ({ id: user.id, distance: dist(self, user) }));
+
+  assert.equal(dist(self, { x: 103, y: 104 }), 5);
+  assert.equal(neighbors[0].distance, HEAR_RADIUS);
+  assert.ok(neighbors[1].distance > HEAR_RADIUS);
+
+  const entered = diffPeers(new Set(), neighbors);
+  assert.deepEqual([...entered.next], ['edge']);
+  assert.deepEqual(entered.entered, ['edge']);
+
+  const heldAtDropBoundary = diffPeers(entered.next, [
+    { id: 'edge', distance: HEAR_RADIUS + HEAR_HYSTERESIS },
+  ]);
+  assert.deepEqual([...heldAtDropBoundary.next], ['edge']);
+
+  const leftBeyondBoundary = diffPeers(heldAtDropBoundary.next, [
+    { id: 'edge', distance: HEAR_RADIUS + HEAR_HYSTERESIS + 0.01 },
+  ]);
+  assert.deepEqual(leftBeyondBoundary.left, ['edge']);
 });
 
 test('pan is signed and clamped', () => {

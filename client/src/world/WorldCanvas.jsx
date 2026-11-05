@@ -34,7 +34,7 @@ function roundedRectPath(ctx, x, y, width, height, radius) {
   ctx.closePath();
 }
 
-export default function WorldCanvas({ world, mixer, hearRadius, zoom, onZoomChange, onMove, onFrame, onStats, onDebugChange }) {
+export default function WorldCanvas({ world, mixer, hearRadius, zoom, onZoomChange, onMove, onFrame, onStats, onDebugChange, joined }) {
   const canvasRef = useRef(null);
   // Keep the animation loop pointed at current props without restarting it
   // whenever audio state or a callback changes.
@@ -56,10 +56,9 @@ export default function WorldCanvas({ world, mixer, hearRadius, zoom, onZoomChan
     bg.src = '/room.png';
 
     // --- input -----------------------------------------------------------
-    // Don't move the character or toggle debug mode while the user is typing.
-    const typing = (e) => /INPUT|TEXTAREA|SELECT/.test(e.target?.tagName ?? '');
+    // Keep movement keys scoped to the focused map so page controls remain usable.
     const onKeyDown = (e) => {
-      if (typing(e) || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (document.activeElement !== canvas || e.metaKey || e.ctrlKey || e.altKey) return;
       const k = e.key.toLowerCase();
       // Track held keys so world.js can turn them into movement each frame.
       if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift'].includes(k)) { world.keys.add(k); e.preventDefault(); }
@@ -72,6 +71,7 @@ export default function WorldCanvas({ world, mixer, hearRadius, zoom, onZoomChan
     // Clear held keys if the tab loses focus, avoiding stuck movement.
     const onBlur = () => world.keys.clear();
     const onClick = (e) => {
+      canvas.focus();
       const r = canvas.getBoundingClientRect();
       const currentZoom = live.current.zoom;
       const viewX = cameraOffset(world.self.x, currentZoom, WORLD.width);
@@ -134,7 +134,14 @@ export default function WorldCanvas({ world, mixer, hearRadius, zoom, onZoomChan
     };
   }, [world]);
 
-  return <canvas ref={canvasRef} className="world-canvas" aria-label="Virtual office map. Click to walk, or use WASD / arrow keys." />;
+  return (
+    <canvas
+      ref={canvasRef}
+      className="world-canvas"
+      tabIndex={joined ? 0 : -1}
+      aria-label="Virtual office map. Focus this map and use WASD or arrow keys to move. Click to walk."
+    />
+  );
 }
 
 function cameraOffset(position, zoom, dimension) {

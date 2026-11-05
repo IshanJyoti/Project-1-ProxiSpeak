@@ -656,12 +656,12 @@ export default function App() {
               <span className="eyebrow">YOUR WORKSPACE</span>
               <h2>Open office <span className="map-live"><i className={`led ${network}`} />{joined ? statusText : 'Ready to join'}</span></h2>
             </div>
-            <button className={`map-action${showObstacles ? ' is-active' : ''}`} onClick={toggleObstacles} aria-pressed={showObstacles}>
+            <button type="button" className={`map-action${showObstacles ? ' is-active' : ''}`} onClick={toggleObstacles} aria-pressed={showObstacles}>
               <span aria-hidden="true">▧</span>{showObstacles ? 'Hide layout' : 'Show layout'}
             </button>
           </div>
           <div className="map-frame">
-            <WorldCanvas world={world} mixer={mixer} hearRadius={hearRadius} zoom={mapZoom} onZoomChange={changeMapZoom} onMove={onMove} onFrame={onFrame} onStats={(s) => setFps(s.fps)} onDebugChange={setShowObstacles} />
+            <WorldCanvas world={world} mixer={mixer} hearRadius={hearRadius} zoom={mapZoom} onZoomChange={changeMapZoom} onMove={onMove} onFrame={onFrame} onStats={(s) => setFps(s.fps)} onDebugChange={setShowObstacles} joined={joined} />
             {!joined && (
               <div className="overlay">
                 <div className="card">
@@ -694,8 +694,8 @@ export default function App() {
                     </div>
                   </div>
                   <div className="join-actions">
-                    <button className="primary" onClick={() => join(true)}><span aria-hidden="true">◉</span> Join with microphone</button>
-                    <button className="listen-button" onClick={() => join(false)}>Listen only</button>
+                    <button type="button" className="primary" onClick={() => join(true)}><span aria-hidden="true">◉</span> Join with microphone</button>
+                    <button type="button" className="listen-button" onClick={() => join(false)}>Listen only</button>
                   </div>
                   {error && <p className="error" role="alert">{error}</p>}
                 </div>
@@ -709,7 +709,7 @@ export default function App() {
             </div>
             <div className="map-corner-label"><span>⌖</span> MAIN OFFICE <i /> {WORLD.width} × {WORLD.height}</div>
           </div>
-          <div className="hint"><span className="hint-icon">↖</span><span><b>Click anywhere</b> to walk</span><span className="hint-divider" /><span><b>WASD</b> or arrow keys to move</span><kbd>SHIFT</kbd><span>to run</span><span className="hint-divider" /><span><kbd>O</kbd> layout</span></div>
+          <div className="hint"><span className="hint-icon" aria-hidden="true">↖</span><span><b>Click anywhere</b> to walk</span><span className="hint-divider" /><span>Tab to the map, then use <b>WASD</b> or arrow keys to move</span><kbd>SHIFT</kbd><span>to run</span><span className="hint-divider" /><span><kbd>O</kbd> layout</span></div>
           <section className="chat-panel" aria-label="Team chat">
             <div className="chat-heading">
               <div><span className="eyebrow">ASYNC CONVERSATION</span><h3>Team chat</h3></div>
@@ -763,7 +763,7 @@ export default function App() {
             <div className="range-setting">
               <label htmlFor="hear-radius"><span>Listening distance</span><b>{rangeDraft}px</b></label>
               <input id="hear-radius" type="range" min={HEAR_RADIUS_MIN} max={HEAR_RADIUS_MAX} step={HEAR_RADIUS_STEP} value={rangeDraft} onChange={(e) => setRangeDraft(Number(e.target.value))} />
-              <button className="save-range" onClick={saveHearRadius} disabled={savingRange || rangeDraft === hearRadius}>
+              <button type="button" className="save-range" onClick={saveHearRadius} disabled={savingRange || rangeDraft === hearRadius}>
                 {savingRange ? 'Saving…' : rangeDraft === hearRadius ? 'Range saved' : 'Save range'}
               </button>
               {needsAdminToken && (
