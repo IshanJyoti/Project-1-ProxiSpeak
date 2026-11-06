@@ -6,7 +6,8 @@ import { config } from './config.js';
 import { MemoryGeoStore } from './store/memoryStore.js';
 import { createLayoutStore } from './layoutStore.js';
 import { attachRealtime } from './realtime.js';
-import { clusters, validObstacle, HEAR_RADIUS_MIN, HEAR_RADIUS_MAX, validHearRadius } from '../../shared/geo.js';
+import { createRoomSettingsRouter } from './roomSettings.js';
+import { clusters, validObstacle } from '../../shared/geo.js';
 
 const store = config.mongoUrl ? new (await import('./store/mongoStore.js')).MongoGeoStore() : new MemoryGeoStore();
 await store.init();
@@ -36,6 +37,8 @@ const { metrics, setHearRadius } = attachRealtime(io, { store, layouts });
 const ROOM_RE = /^[a-z0-9-]{1,48}$/i;
 const roomParam = (req, res) => (ROOM_RE.test(req.params.roomId) ? req.params.roomId : (res.status(400).json({ error: 'bad room id' }), null));
 
+app.use(createRoomSettingsRouter({ layouts, setHearRadius, adminToken: config.adminToken }));
+
 app.get('/api/healthz', (_req, res) => res.json({ status: 'ok', store: store.kind, redis: Boolean(config.redisUrl) }));
 app.get('/api/metrics', (_req, res) => res.json({ proximityQueryMs: metrics.summary(), store: store.kind }));
 
@@ -50,23 +53,6 @@ app.get('/api/rooms/:roomId/clusters', async (req, res) => {
   const roomId = roomParam(req, res); if (!roomId) return;
   const { hearRadius } = await layouts.getAudioSettings(roomId);
   res.json({ roomId, radius: hearRadius, clusters: clusters(await store.all(roomId), hearRadius) });
-});
-
-app.get('/api/rooms/:roomId/settings', async (req, res) => {
-  const roomId = roomParam(req, res); if (!roomId) return;
-  res.json({ roomId, ...(await layouts.getAudioSettings(roomId)) });
-});
-
-app.put('/api/rooms/:roomId/settings', async (req, res) => {
-  const roomId = roomParam(req, res); if (!roomId) return;
-  if (config.adminToken && req.get('x-admin-token') !== config.adminToken) return res.status(401).json({ error: 'unauthorized' });
-  const { hearRadius } = req.body ?? {};
-  if (!validHearRadius(hearRadius)) {
-    return res.status(400).json({ error: `hearRadius must be an integer from ${HEAR_RADIUS_MIN} to ${HEAR_RADIUS_MAX}` });
-  }
-  await layouts.saveHearRadius(roomId, hearRadius);
-  await setHearRadius(roomId, hearRadius);
-  res.json({ roomId, hearRadius });
 });
 
 // $geoWithin demo: who is inside a rectangular area (e.g. a meeting room)?
