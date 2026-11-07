@@ -95,6 +95,8 @@ export default function App() {
   const pushToTalkEnabledRef = useRef(false);
   const pushToTalkSourcesRef = useRef(new Set());
   const pushToTalkButtonRef = useRef(null);
+  const previousNetworkRef = useRef(null);
+  const previousMicrophoneRef = useRef(null);
   const [name, setName] = useState('');
   const [selectedAvatarId, setSelectedAvatarId] = useState(() => {
     const saved = localStorage.getItem(AVATAR_PREFERENCE_KEY);
@@ -102,6 +104,7 @@ export default function App() {
   });
   const [joined, setJoined] = useState(false);
   const [network, setNetwork] = useState('offline');
+  const [connectionAnnouncement, setConnectionAnnouncement] = useState({ id: 0, text: '' });
   const [error, setError] = useState('');
   const [micOn, setMicOn] = useState(true);
   const [pushToTalkEnabled, setPushToTalkEnabled] = useState(false);
@@ -116,6 +119,7 @@ export default function App() {
   const [nearby, setNearby] = useState(0);
   const [fps, setFps] = useState(0);
   const [hasMic, setHasMic] = useState(false);
+  const [microphoneAnnouncement, setMicrophoneAnnouncement] = useState({ id: 0, text: '' });
   const [audioInputs, setAudioInputs] = useState([]);
   const [selectedMicrophoneId, setSelectedMicrophoneId] = useState(() => localStorage.getItem(MICROPHONE_PREFERENCE_KEY) || '');
   const [switchingMicrophone, setSwitchingMicrophone] = useState(false);
@@ -130,6 +134,34 @@ export default function App() {
   const [adminToken, setAdminToken] = useState('');
   const [theme, setTheme] = useState(() => (localStorage.getItem(THEME_PREFERENCE_KEY) === 'dark' ? 'dark' : 'light'));
   hearRadiusRef.current = hearRadius;
+
+  useEffect(() => {
+    const previousNetwork = previousNetworkRef.current;
+    previousNetworkRef.current = network;
+    if (previousNetwork === null || previousNetwork === network) return;
+    let announcement;
+    if (network === 'connecting') announcement = 'Connecting to the office.';
+    else if (network === 'connected') {
+      announcement = previousNetwork === 'reconnecting' ? 'Connection restored.' : 'Connected to the office.';
+    } else if (network === 'reconnecting') announcement = 'Connection interrupted. Reconnecting.';
+    else announcement = 'Disconnected from the office.';
+    setConnectionAnnouncement((current) => ({ id: current.id + 1, text: announcement }));
+  }, [network]);
+
+  useEffect(() => {
+    const previous = previousMicrophoneRef.current;
+    previousMicrophoneRef.current = { joined, hasMic, micOn };
+    if (!joined || !previous) return;
+    let announcement;
+    if (!previous.joined) {
+      announcement = hasMic ? (micOn ? 'Microphone on.' : 'Microphone muted.') : 'Joined in listen-only mode. Microphone unavailable.';
+    } else if (previous.hasMic !== hasMic) {
+      announcement = hasMic ? (micOn ? 'Microphone enabled and on.' : 'Microphone enabled and muted.') : 'Microphone unavailable.';
+    } else if (previous.micOn !== micOn) {
+      announcement = micOn ? 'Microphone on.' : 'Microphone muted.';
+    }
+    if (announcement) setMicrophoneAnnouncement((current) => ({ id: current.id + 1, text: announcement }));
+  }, [joined, hasMic, micOn]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -627,6 +659,8 @@ export default function App() {
 
   return (
     <div className="shell">
+      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true"><span key={connectionAnnouncement.id}>{connectionAnnouncement.text}</span></div>
+      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true"><span key={microphoneAnnouncement.id}>{microphoneAnnouncement.text}</span></div>
       <header className="topbar">
         <div className="brand">
           <span className="brand-mark" aria-hidden="true"><i /><i /><i /></span>
