@@ -12,7 +12,10 @@ export const AVATAR_CHOICES = [
 
 export const AVATAR_IDS = new Set(AVATAR_CHOICES.map(({ id }) => id));
 
-export function avatarById(id) {
+export function avatarById(id, customImage) {
+  if (id === 'custom' && customImage) {
+    return { id, label: 'Custom', image: customImage, background: '#687782' };
+  }
   return AVATAR_CHOICES.find((avatar) => avatar.id === id) ??
     AVATAR_CHOICES.find((avatar) => avatar.id === DEFAULT_AVATAR_ID);
 }

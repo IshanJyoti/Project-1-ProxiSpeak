@@ -45,7 +45,7 @@ app.get('/api/metrics', (_req, res) => res.json({ proximityQueryMs: metrics.summ
 app.get('/api/rooms/:roomId/presence', async (req, res) => {
   const roomId = roomParam(req, res); if (!roomId) return;
   const users = await store.all(roomId);
-  res.json({ roomId, participants: users.map((u) => ({ id: u.id, displayName: u.name, x: u.x, y: u.y, color: u.color, avatarId: u.avatarId })) });
+  res.json({ roomId, participants: users.map((u) => ({ id: u.id, displayName: u.name, x: u.x, y: u.y, color: u.color, avatarId: u.avatarId, avatarImage: u.avatarImage })) });
 });
 
 // Proximity clusters = groups of avatars that can hear each other (connected components within earshot).

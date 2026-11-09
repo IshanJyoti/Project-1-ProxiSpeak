@@ -25,7 +25,7 @@ function makeIo() {
   return io;
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const join = (sock, id, x, y, avatarId) => sock.h['room:join']({ roomId: 'main-office', participant: { id, displayName: id, color: '#aabbcc', x, y, avatarId } });
+const join = (sock, id, x, y, avatarId, avatarImage) => sock.h['room:join']({ roomId: 'main-office', participant: { id, displayName: id, color: '#aabbcc', x, y, avatarId, avatarImage } });
 const move = (sock, x, y) => sock.h['avatar:move']({ roomId: 'main-office', x, y });
 const events = (io, ev) => io.log.filter((l) => l.ev === ev);
 
@@ -151,6 +151,31 @@ test('server rejects unknown avatar selections', async () => {
   attachRealtime(io, { store: new MemoryGeoStore(), layouts: { get: async () => [] } });
   const a = io.connect();
   await join(a, 'user-a', 100, 300, 'untrusted-image-url');
+  assert.ok(a.out.some((o) => o.ev === 'room:error'));
+});
+
+test('custom avatar images are shared and restored in room snapshots', async () => {
+  const io = makeIo();
+  const store = new MemoryGeoStore();
+  attachRealtime(io, { store, layouts: { get: async () => [] } });
+  const image = `data:image/jpeg;base64,${'a'.repeat(100)}`;
+  const a = io.connect();
+  const b = io.connect();
+
+  await join(a, 'user-a', 100, 300, 'custom', image);
+  assert.equal((await store.get('main-office', 'user-a')).avatarImage, image);
+  assert.ok(events(io, 'user:join').some((event) => event.data.id === 'user-a' && event.data.avatarImage === image));
+
+  await join(b, 'user-b', 500, 300);
+  const snapshot = b.out.find((event) => event.ev === 'world:snapshot');
+  assert.equal(snapshot.data.users.find((user) => user.id === 'user-a').avatarImage, image);
+});
+
+test('server rejects invalid custom avatar images', async () => {
+  const io = makeIo();
+  attachRealtime(io, { store: new MemoryGeoStore(), layouts: { get: async () => [] } });
+  const a = io.connect();
+  await join(a, 'user-a', 100, 300, 'custom', 'data:image/svg+xml;base64,PHN2Zz4=');
   assert.ok(a.out.some((o) => o.ev === 'room:error'));
 });
 

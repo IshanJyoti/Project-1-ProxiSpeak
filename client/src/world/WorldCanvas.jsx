@@ -8,13 +8,13 @@ const avatarImages = new Map();
 
 function getAvatarImage(avatar) {
   if (!avatar.image) return null;
-  if (!avatarImages.has(avatar.id)) {
+  if (!avatarImages.has(avatar.image)) {
     // Reuse each loaded image instead of creating a new Image on every frame.
     const image = new Image();
     image.src = avatar.image;
-    avatarImages.set(avatar.id, image);
+    avatarImages.set(avatar.image, image);
   }
-  return avatarImages.get(avatar.id);
+  return avatarImages.get(avatar.image);
 }
 
 // 2D virtual office rendered on an HTML5 canvas with requestAnimationFrame (target: steady 60 FPS).
@@ -223,7 +223,7 @@ function draw(ctx, dpr, world, bg, mixer, hearRadius, zoom, now) {
 
   // Draw users back-to-front so avatars lower on the map appear in front.
   const people = [...world.users.values()].filter((u) => u.id !== world.selfId).map((u) => ({ ...u, self: false }));
-  people.push({ id: world.selfId, name: world.selfName ?? 'You', color: world.selfColor ?? '#e5bd83', avatarId: world.selfAvatarId, muted: world.selfMuted, rx: me.x, ry: me.y, self: true });
+  people.push({ id: world.selfId, name: world.selfName ?? 'You', color: world.selfColor ?? '#e5bd83', avatarId: world.selfAvatarId, avatarImage: world.selfAvatarImage, muted: world.selfMuted, rx: me.x, ry: me.y, self: true });
   people.sort((a, b) => a.ry - b.ry);
 
   for (const p of people) {
@@ -249,7 +249,7 @@ function draw(ctx, dpr, world, bg, mixer, hearRadius, zoom, now) {
     ctx.shadowOffsetY = 1.5;
     ctx.beginPath();
     ctx.arc(p.rx, p.ry, AVATAR_DISPLAY_RADIUS, 0, Math.PI * 2);
-    const avatar = avatarById(p.avatarId);
+    const avatar = avatarById(p.avatarId, p.avatarImage);
     // Fill and clip to a circle, then show the image, emoji, or name initials.
     ctx.fillStyle = avatar.background ?? p.color;
     ctx.fill();
@@ -259,7 +259,7 @@ function draw(ctx, dpr, world, bg, mixer, hearRadius, zoom, now) {
       const size = AVATAR_DISPLAY_RADIUS * 2;
       const [sourceX, sourceY, sourceWidth, sourceHeight] = avatar.crop ??
         [0, 0, avatarImage.naturalWidth, avatarImage.naturalHeight];
-      ctx.filter = 'brightness(2) saturate(1.12) contrast(1.08)';
+      ctx.filter = avatar.id === 'custom' ? 'none' : 'brightness(2) saturate(1.12) contrast(1.08)';
       ctx.drawImage(avatarImage, sourceX, sourceY, sourceWidth, sourceHeight, p.rx - size / 2, p.ry - size / 2, size, size);
       ctx.filter = 'none';
     } else if (avatar.emoji) {

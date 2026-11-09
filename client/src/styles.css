@@ -190,6 +190,17 @@ kbd { padding: 3px 7px; border: 1px solid var(--line); border-bottom-width: 2px;
 .avatar-choice.selected { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
 .avatar-preview { width: 40px; height: 40px; display: grid; place-items: center; overflow: hidden; border-radius: 50%; color: #fff; font-size: 18px; box-shadow: var(--shadow-sm); }
 .avatar-choice .avatar-art { width: 100%; height: 100%; display: grid; place-items: center; border-radius: inherit; object-fit: cover; font-size: 21px; line-height: 1; }
+.avatar-upload { display: inline-block; margin-top: 9px; color: var(--accent); font-size: 12px; font-weight: 800; cursor: pointer; }
+#avatar-file { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.avatar-crop { display: grid; gap: 8px; margin-top: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface-2); }
+.avatar-crop .name-label { margin: 0; }
+.avatar-crop-preview { width: 144px; height: 144px; justify-self: center; overflow: hidden; border-radius: 18px; background: #dfe1ea; }
+.avatar-crop-preview img { width: 100%; height: 100%; object-fit: cover; }
+.avatar-crop > label { display: grid; grid-template-columns: 1fr; gap: 4px; color: var(--text-2); font-size: 11px; font-weight: 700; }
+.card .avatar-crop input[type='range'] { width: 100%; height: 16px; margin: 0; padding: 0; accent-color: var(--accent); }
+.avatar-crop-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+.avatar-crop-actions button { padding: 9px 12px; font-size: 12px; }
+.avatar-crop-actions .primary { padding: 9px 12px; }
 .join-actions { display: grid; grid-template-columns: 1.5fr 1fr; gap: 10px; }
 button { border-radius: 14px; border: 1px solid var(--line); background: #fff; font-weight: 800; cursor: pointer; transition: transform .15s ease, background .18s ease, box-shadow .18s ease, color .18s ease; }
 button:disabled { opacity: .45; cursor: not-allowed; }

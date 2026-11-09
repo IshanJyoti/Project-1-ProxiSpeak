@@ -15,6 +15,9 @@ const MAP_ZOOM_MAX = 2.5;
 const MAP_ZOOM_STEP = 0.25;
 const ACTIVE_SESSION_KEY = 'proxispeak-active-session';
 const AVATAR_PREFERENCE_KEY = 'proxispeak-avatar-id';
+const AVATAR_IMAGE_PREFERENCE_KEY = 'proxispeak-avatar-image';
+const MAX_AVATAR_IMAGE_LENGTH = 50_000;
+const MAX_AVATAR_FILE_SIZE = 10 * 1024 * 1024;
 const MICROPHONE_PREFERENCE_KEY = 'proxispeak-microphone-id';
 const THEME_PREFERENCE_KEY = 'proxispeak-theme';
 const QUICK_REACTIONS = [
@@ -70,10 +73,13 @@ function readSavedSession() {
   try {
     const session = JSON.parse(saved);
     if (typeof session.displayName !== 'string' || !session.displayName.trim()) return null;
+    const savedAvatarImage = localStorage.getItem(AVATAR_IMAGE_PREFERENCE_KEY);
+    const hasCustomAvatar = session.avatarId === 'custom' && isAvatarImage(savedAvatarImage);
     const { x, y } = session;
     return {
       displayName: session.displayName,
-      avatarId: AVATAR_IDS.has(session.avatarId) ? session.avatarId : DEFAULT_AVATAR_ID,
+      avatarId: AVATAR_IDS.has(session.avatarId) || hasCustomAvatar ? session.avatarId : DEFAULT_AVATAR_ID,
+      avatarImage: hasCustomAvatar ? savedAvatarImage : '',
       position: Number.isFinite(x) && Number.isFinite(y) &&
         x >= 0 && x <= WORLD.width && y >= 0 && y <= WORLD.height
         ? { x, y }
@@ -82,6 +88,11 @@ function readSavedSession() {
   } catch {
     return null;
   }
+}
+
+function isAvatarImage(value) {
+  return typeof value === 'string' && value.length <= MAX_AVATAR_IMAGE_LENGTH &&
+    /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(value);
 }
 
 export default function App() {
@@ -98,10 +109,21 @@ export default function App() {
   const previousNetworkRef = useRef(null);
   const previousMicrophoneRef = useRef(null);
   const [name, setName] = useState('');
+  const [selectedAvatarImage, setSelectedAvatarImage] = useState(() => {
+    const saved = localStorage.getItem(AVATAR_IMAGE_PREFERENCE_KEY);
+    return isAvatarImage(saved) ? saved : '';
+  });
   const [selectedAvatarId, setSelectedAvatarId] = useState(() => {
     const saved = localStorage.getItem(AVATAR_PREFERENCE_KEY);
-    return AVATAR_IDS.has(saved) ? saved : DEFAULT_AVATAR_ID;
+    return AVATAR_IDS.has(saved) || (saved === 'custom' && isAvatarImage(localStorage.getItem(AVATAR_IMAGE_PREFERENCE_KEY)))
+      ? saved
+      : DEFAULT_AVATAR_ID;
   });
+  const [cropSource, setCropSource] = useState(null);
+  const [cropZoom, setCropZoom] = useState(1);
+  const [cropX, setCropX] = useState(50);
+  const [cropY, setCropY] = useState(50);
+  const [avatarError, setAvatarError] = useState('');
   const [joined, setJoined] = useState(false);
   const [network, setNetwork] = useState('offline');
   const [connectionAnnouncement, setConnectionAnnouncement] = useState({ id: 0, text: '' });
@@ -224,8 +246,74 @@ export default function App() {
 
   const addUser = useCallback((u) => {
     const prev = world.users.get(u.id);
-    world.users.set(u.id, { id: u.id, name: u.name, color: u.color, avatarId: u.avatarId ?? DEFAULT_AVATAR_ID, muted: u.muted ?? true, x: u.x, y: u.y, rx: prev?.rx ?? u.x, ry: prev?.ry ?? u.y });
+    world.users.set(u.id, { id: u.id, name: u.name, color: u.color, avatarId: u.avatarId ?? DEFAULT_AVATAR_ID, avatarImage: u.avatarImage, muted: u.muted ?? true, x: u.x, y: u.y, rx: prev?.rx ?? u.x, ry: prev?.ry ?? u.y });
   }, [world]);
+
+  useEffect(() => () => {
+    if (cropSource?.url) URL.revokeObjectURL(cropSource.url);
+  }, [cropSource]);
+
+  const loadAvatarFile = (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    setAvatarError('');
+    if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setAvatarError('Choose a JPG, PNG, or WebP image.');
+      return;
+    }
+    if (file.size > MAX_AVATAR_FILE_SIZE) {
+      setAvatarError('Choose an image smaller than 10 MB.');
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => setCropSource({ url, width: image.naturalWidth, height: image.naturalHeight });
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      setAvatarError('That image could not be opened. Try another image.');
+    };
+    image.src = url;
+    setCropZoom(1);
+    setCropX(50);
+    setCropY(50);
+  };
+
+  const applyAvatarCrop = () => {
+    if (!cropSource) return;
+    const cropSize = Math.min(cropSource.width, cropSource.height) / cropZoom;
+    const sourceX = (cropSource.width - cropSize) * cropX / 100;
+    const sourceY = (cropSource.height - cropSize) * cropY / 100;
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const context = canvas.getContext('2d');
+    if (!context) {
+      setAvatarError('Your browser could not crop this image. Try another browser.');
+      return;
+    }
+    const image = new Image();
+    image.onload = () => {
+      context.drawImage(image, sourceX, sourceY, cropSize, cropSize, 0, 0, canvas.width, canvas.height);
+      const croppedImage = canvas.toDataURL('image/jpeg', 0.78);
+      if (!isAvatarImage(croppedImage)) {
+        setAvatarError('The cropped image is too large. Try a simpler image.');
+        return;
+      }
+      try {
+        localStorage.setItem(AVATAR_IMAGE_PREFERENCE_KEY, croppedImage);
+        localStorage.setItem(AVATAR_PREFERENCE_KEY, 'custom');
+        setSelectedAvatarImage(croppedImage);
+        setSelectedAvatarId('custom');
+        setAvatarError('');
+        setCropSource(null);
+      } catch (storageError) {
+        setAvatarError(`Could not save your avatar on this device: ${storageError.message || 'storage is full.'}`);
+      }
+    };
+    image.onerror = () => setAvatarError('That image could not be cropped. Try another image.');
+    image.src = cropSource.url;
+  };
 
   const teardown = useCallback(() => {
     const s = sessionRef.current;
@@ -283,6 +371,8 @@ export default function App() {
     setError('');
     const displayName = (savedSession?.displayName ?? name).trim();
     const avatarId = savedSession?.avatarId ?? selectedAvatarId;
+    const avatarImage = avatarId === 'custom' ? (savedSession?.avatarImage ?? selectedAvatarImage) : '';
+    if (avatarId === 'custom' && !isAvatarImage(avatarImage)) return setError('Choose and crop an image for your custom avatar first.');
     if (!displayName) return setError('Please enter your name first.');
     let stream;
     if (withMic) {
@@ -305,6 +395,7 @@ export default function App() {
     world.selfId = selfId;
     world.selfName = displayName;
     world.selfAvatarId = avatarId;
+    world.selfAvatarImage = avatarImage;
     if (stream && pushToTalkEnabled) stream.getAudioTracks().forEach((track) => { track.enabled = false; });
     world.selfMuted = !stream || pushToTalkEnabled;
     world.selfColor = colorFor(selfId);
@@ -330,13 +421,14 @@ export default function App() {
     sessionStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify({
       displayName,
       avatarId,
+      avatarImage,
       x: world.self.x,
       y: world.self.y,
     }));
 
     socket.on('connect', () => {
       setNetwork('connected');
-      socket.emit('room:join', { roomId: ROOM_ID, participant: { id: selfId, displayName, avatarId, color: world.selfColor, x: world.self.x, y: world.self.y, muted: world.selfMuted } });
+      socket.emit('room:join', { roomId: ROOM_ID, participant: { id: selfId, displayName, avatarId, avatarImage, color: world.selfColor, x: world.self.x, y: world.self.y, muted: world.selfMuted } });
     });
     socket.on('disconnect', () => setNetwork('reconnecting'));
     socket.on('connect_error', () => setNetwork('reconnecting'));
@@ -385,6 +477,7 @@ export default function App() {
     restoreStartedRef.current = true;
     setName(savedSession.displayName);
     setSelectedAvatarId(savedSession.avatarId);
+    if (savedSession.avatarImage) setSelectedAvatarImage(savedSession.avatarImage);
     void join(false, savedSession);
   }, []);
 
@@ -725,7 +818,48 @@ export default function App() {
                           <span>{avatar.label}</span>
                         </button>
                       ))}
+                      <button
+                        className={`avatar-choice${selectedAvatarId === 'custom' ? ' selected' : ''}`}
+                        type="button"
+                        aria-label="Choose your custom avatar"
+                        aria-pressed={selectedAvatarId === 'custom'}
+                        onClick={() => {
+                          if (!selectedAvatarImage) {
+                            document.getElementById('avatar-file').click();
+                            return;
+                          }
+                          setSelectedAvatarId('custom');
+                          localStorage.setItem(AVATAR_PREFERENCE_KEY, 'custom');
+                        }}
+                      >
+                        <span className="avatar-preview" style={{ background: '#687782' }}>
+                          {selectedAvatarImage ? <AvatarPreview avatarId="custom" avatarImage={selectedAvatarImage} /> : <span aria-hidden="true">＋</span>}
+                        </span>
+                        <span>{selectedAvatarImage ? 'Your avatar' : 'Upload avatar'}</span>
+                      </button>
                     </div>
+                    <label className="avatar-upload" htmlFor="avatar-file">{selectedAvatarImage ? 'Choose a different avatar' : 'Upload an avatar from your device'}</label>
+                    <input id="avatar-file" type="file" accept="image/jpeg,image/png,image/webp" onChange={loadAvatarFile} />
+                    {cropSource && (
+                      <div className="avatar-crop">
+                        <span className="name-label">CROP YOUR PHOTO</span>
+                        <div className="avatar-crop-preview">
+                          <img
+                            src={cropSource.url}
+                            alt="Crop preview"
+                            style={{ objectPosition: `${cropX}% ${cropY}%`, transform: `scale(${cropZoom})` }}
+                          />
+                        </div>
+                        <label>Zoom <input type="range" min="1" max="3" step="0.05" value={cropZoom} onChange={(event) => setCropZoom(Number(event.target.value))} /></label>
+                        <label>Horizontal position <input type="range" min="0" max="100" value={cropX} onChange={(event) => setCropX(Number(event.target.value))} /></label>
+                        <label>Vertical position <input type="range" min="0" max="100" value={cropY} onChange={(event) => setCropY(Number(event.target.value))} /></label>
+                        <div className="avatar-crop-actions">
+                          <button type="button" className="listen-button" onClick={() => setCropSource(null)}>Cancel</button>
+                          <button type="button" className="primary" onClick={applyAvatarCrop}>Use this avatar</button>
+                        </div>
+                      </div>
+                    )}
+                    {avatarError && <p className="error" role="alert">{avatarError}</p>}
                   </div>
                   <div className="join-actions">
                     <button type="button" className="primary" onClick={() => join(true)}><span aria-hidden="true">◉</span> Join with microphone</button>
@@ -812,11 +946,11 @@ export default function App() {
           <section className="panel">
             <div className="panel-heading"><div><span className="eyebrow">TEAM</span><h3>In the office</h3></div><span className="count-badge">{joined ? roster.length + 1 : 0}</span></div>
             <ul className="people">
-              {joined && <li><span className="dot self-dot" style={{ background: world.selfColor }}><AvatarPreview avatarId={world.selfAvatarId} /></span><span className="person-name">{name}<small>You · {network === 'connected' ? 'Live' : statusText}</small><small className={`voice-status${world.selfMuted ? ' is-muted' : ''}`}>{localVoiceStatus}</small></span><span className="online-dot" /></li>}
+              {joined && <li><span className="dot self-dot" style={{ background: world.selfColor }}><AvatarPreview avatarId={world.selfAvatarId} avatarImage={world.selfAvatarImage} /></span><span className="person-name">{name}<small>You · {network === 'connected' ? 'Live' : statusText}</small><small className={`voice-status${world.selfMuted ? ' is-muted' : ''}`}>{localVoiceStatus}</small></span><span className="online-dot" /></li>}
               {roster.map((p) => {
                 const connectionText = { connecting: 'Audio connecting', connected: 'Audio connected', disconnecting: 'Audio disconnecting', outside: 'Outside audio range' }[p.connection] ?? 'Audio unavailable';
                 const voiceText = p.muted ? 'Microphone muted' : p.speaking ? 'Speaking' : 'Microphone on';
-                return <li key={p.id}><span className="dot" style={{ background: p.color }}><AvatarPreview avatarId={p.avatarId} /></span><span className="person-name">{p.name}<span className="participant-states"><small className={`participant-state proximity-status${p.nearby ? ' is-nearby' : ' is-away'}`}><i aria-hidden="true" />{p.nearby ? 'Nearby' : 'Away'}</small><small className={`participant-state voice-status${p.muted ? ' is-muted' : p.speaking ? ' is-speaking' : ''}`}><i aria-hidden="true" />{voiceText}</small></span><small className={`connection-status is-${p.connection}`}>{connectionText}</small><div className="person-volume"><label htmlFor={`volume-${p.id}`}>Volume</label><b>{Math.round(p.volume * 100)}%</b><input id={`volume-${p.id}`} type="range" min="0" max="100" value={Math.round(p.volume * 100)} aria-label={`Volume for ${p.name}`} onChange={(event) => changePeerVolume(p.id, Number(event.target.value))} /><button type="button" className={`person-mute${p.locallyMuted ? ' is-muted' : ''}`} aria-label={`${p.locallyMuted ? 'Unmute' : 'Mute'} ${p.name} locally`} aria-pressed={p.locallyMuted} onClick={() => togglePeerMute(p.id)}>{p.locallyMuted ? 'Unmute' : 'Mute'}</button></div></span><span className="online-dot" /></li>;
+                return <li key={p.id}><span className="dot" style={{ background: p.color }}><AvatarPreview avatarId={p.avatarId} avatarImage={p.avatarImage} /></span><span className="person-name">{p.name}<span className="participant-states"><small className={`participant-state proximity-status${p.nearby ? ' is-nearby' : ' is-away'}`}><i aria-hidden="true" />{p.nearby ? 'Nearby' : 'Away'}</small><small className={`participant-state voice-status${p.muted ? ' is-muted' : p.speaking ? ' is-speaking' : ''}`}><i aria-hidden="true" />{voiceText}</small></span><small className={`connection-status is-${p.connection}`}>{connectionText}</small><div className="person-volume"><label htmlFor={`volume-${p.id}`}>Volume</label><b>{Math.round(p.volume * 100)}%</b><input id={`volume-${p.id}`} type="range" min="0" max="100" value={Math.round(p.volume * 100)} aria-label={`Volume for ${p.name}`} onChange={(event) => changePeerVolume(p.id, Number(event.target.value))} /><button type="button" className={`person-mute${p.locallyMuted ? ' is-muted' : ''}`} aria-label={`${p.locallyMuted ? 'Unmute' : 'Mute'} ${p.name} locally`} aria-pressed={p.locallyMuted} onClick={() => togglePeerMute(p.id)}>{p.locallyMuted ? 'Unmute' : 'Mute'}</button></div></span><span className="online-dot" /></li>;
               })}
               {!joined && <li className="empty-roster">Join the room to meet your team.</li>}
               {joined && roster.length === 0 && <li className="empty-roster">You’re the first one here. Invite your team!</li>}
@@ -876,8 +1010,8 @@ export default function App() {
   );
 }
 
-function AvatarPreview({ avatarId }) {
-  const avatar = avatarById(avatarId);
+function AvatarPreview({ avatarId, avatarImage }) {
+  const avatar = avatarById(avatarId, avatarImage);
   if (avatar.image) return <img className="avatar-art" src={avatar.image} alt="" />;
   if (avatar.emoji) return <span className="avatar-art">{avatar.emoji}</span>;
   return <span className="avatar-art">Aa</span>;

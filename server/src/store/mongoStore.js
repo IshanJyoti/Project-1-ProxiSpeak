@@ -15,11 +15,11 @@ export class MongoGeoStore {
     await this.presence.createIndex({ roomId: 1, userId: 1 }, { unique: true });
     await this.presence.createIndex({ updatedAt: 1 }, { expireAfterSeconds: config.presenceTtlSeconds });
   }
-  _toUser(d) { return { id: d.userId, name: d.name, color: d.color, avatarId: d.avatarId ?? 'initials', muted: d.muted ?? true, x: d.pos[0], y: d.pos[1] }; }
+  _toUser(d) { return { id: d.userId, name: d.name, color: d.color, avatarId: d.avatarId ?? 'initials', avatarImage: d.avatarImage, muted: d.muted ?? true, x: d.pos[0], y: d.pos[1] }; }
   async upsert(roomId, u) {
     await this.presence.updateOne(
       { roomId, userId: u.id },
-      { $set: { name: u.name, color: u.color, avatarId: u.avatarId ?? 'initials', muted: u.muted ?? true, pos: [u.x, u.y], updatedAt: new Date() } },
+      { $set: { name: u.name, color: u.color, avatarId: u.avatarId ?? 'initials', avatarImage: u.avatarImage ?? null, muted: u.muted ?? true, pos: [u.x, u.y], updatedAt: new Date() } },
       { upsert: true },
     );
   }

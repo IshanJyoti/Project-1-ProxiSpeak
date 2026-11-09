@@ -7,6 +7,8 @@ import { diffPeers, Metrics } from './proximity.js';
 const ROOM_RE = /^[a-z0-9-]{1,48}$/i;
 const ID_RE = /^[a-zA-Z0-9_-]{5,64}$/;
 const COLOR_RE = /^#[0-9a-f]{6}$/i;
+const MAX_AVATAR_IMAGE_LENGTH = 50_000;
+const AVATAR_IMAGE_RE = /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
 const REACTIONS = new Set(['👍', '❤️', '😂', '👀', '🎉', '🙌']);
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const num = (v) => typeof v === 'number' && Number.isFinite(v);
@@ -112,8 +114,12 @@ export function attachRealtime(io, { store, layouts }) {
       try {
         const p = payload?.participant;
         const avatarId = p?.avatarId ?? DEFAULT_AVATAR_ID;
+        const avatarImage = p?.avatarImage;
+        const validCustomAvatar = avatarId === 'custom' && typeof avatarImage === 'string' &&
+          avatarImage.length <= MAX_AVATAR_IMAGE_LENGTH && AVATAR_IMAGE_RE.test(avatarImage);
         if (!ROOM_RE.test(payload?.roomId ?? '') || !p || !ID_RE.test(p.id) || typeof p.displayName !== 'string' ||
-            !p.displayName.trim() || p.displayName.trim().length > 32 || !COLOR_RE.test(p.color ?? '') || !AVATAR_IDS.has(avatarId) ||
+            !p.displayName.trim() || p.displayName.trim().length > 32 || !COLOR_RE.test(p.color ?? '') ||
+            !(AVATAR_IDS.has(avatarId) || validCustomAvatar) ||
             (p.muted !== undefined && typeof p.muted !== 'boolean')) {
           return socket.emit('room:error', { message: 'Invalid room or participant details.' });
         }
@@ -126,6 +132,7 @@ export function attachRealtime(io, { store, layouts }) {
         }
         const user = {
           id: p.id, name: p.displayName.trim(), color: p.color, avatarId,
+          ...(validCustomAvatar ? { avatarImage } : {}),
           muted: p.muted ?? true,
           x: clamp(num(p.x) ? p.x : SPAWN.x, 0, WORLD.width),
           y: clamp(num(p.y) ? p.y : SPAWN.y, 0, WORLD.height),
