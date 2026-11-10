@@ -20,6 +20,26 @@ const MAX_AVATAR_IMAGE_LENGTH = 50_000;
 const MAX_AVATAR_FILE_SIZE = 10 * 1024 * 1024;
 const MICROPHONE_PREFERENCE_KEY = 'proxispeak-microphone-id';
 const THEME_PREFERENCE_KEY = 'proxispeak-theme';
+const WELCOME_STEPS = [
+  {
+    title: 'Make yourself at home',
+    description: 'Choose a name and avatar, then join with your microphone or come in listen-only.',
+    icon: '✦',
+    label: 'Your space',
+  },
+  {
+    title: 'Move around freely',
+    description: 'Click anywhere on the office map to walk. Use WASD or the arrow keys to move, and hold Shift to run.',
+    icon: '↗',
+    label: 'Get moving',
+  },
+  {
+    title: 'Conversations happen nearby',
+    description: 'Walk close to teammates to hear them naturally. Use team chat and quick reactions whenever you like.',
+    icon: '♫',
+    label: 'Stay connected',
+  },
+];
 const QUICK_REACTIONS = [
   '👍', '❤️', '😂', '👀', '🎉', '🙌',
   '🔥', '💯', '👏', '😍', '🤔', '😎', '🚀', '☕', '👋', '🙏',
@@ -97,6 +117,7 @@ function isAvatarImage(value) {
 
 export default function App() {
   const world = useMemo(createWorld, []);
+  const welcomeDialogRef = useRef(null);
   const sessionRef = useRef(null);
   const sessionChannelRef = useRef(null);
   const restoreStartedRef = useRef(false);
@@ -125,6 +146,8 @@ export default function App() {
   const [cropY, setCropY] = useState(50);
   const [avatarError, setAvatarError] = useState('');
   const [joined, setJoined] = useState(false);
+  const [welcomeOpen, setWelcomeOpen] = useState(true);
+  const [welcomeStep, setWelcomeStep] = useState(0);
   const [network, setNetwork] = useState('offline');
   const [connectionAnnouncement, setConnectionAnnouncement] = useState({ id: 0, text: '' });
   const [error, setError] = useState('');
@@ -156,6 +179,45 @@ export default function App() {
   const [adminToken, setAdminToken] = useState('');
   const [theme, setTheme] = useState(() => (localStorage.getItem(THEME_PREFERENCE_KEY) === 'dark' ? 'dark' : 'light'));
   hearRadiusRef.current = hearRadius;
+
+  const dismissWelcome = useCallback(() => {
+    setWelcomeOpen(false);
+  }, []);
+
+  useEffect(() => {
+    if (!welcomeOpen) return undefined;
+    const previousFocus = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    const dialog = welcomeDialogRef.current;
+    dialog?.querySelector('button')?.focus();
+    document.body.style.overflow = 'hidden';
+
+    const handleDialogKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        dismissWelcome();
+      } else if (event.key === 'Tab' && dialog) {
+        const focusable = [...dialog.querySelectorAll('button:not(:disabled), a[href], input:not(:disabled), [tabindex]:not([tabindex="-1"])')];
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleDialogKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleDialogKeyDown);
+      document.body.style.overflow = previousOverflow;
+      if (previousFocus instanceof HTMLElement && previousFocus !== document.body) previousFocus.focus();
+    };
+  }, [welcomeOpen, dismissWelcome]);
 
   useEffect(() => {
     const previousNetwork = previousNetworkRef.current;
@@ -751,7 +813,8 @@ export default function App() {
   const localVoiceStatus = !hasMic || world.selfMuted ? 'Microphone muted' : 'Microphone on';
 
   return (
-    <div className="shell">
+    <>
+    <div className="shell" aria-hidden={welcomeOpen}>
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true"><span key={connectionAnnouncement.id}>{connectionAnnouncement.text}</span></div>
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true"><span key={microphoneAnnouncement.id}>{microphoneAnnouncement.text}</span></div>
       <header className="topbar">
@@ -760,6 +823,9 @@ export default function App() {
           <div><h1>proxi<span>speak</span></h1><small>THE SPATIAL OFFICE</small></div>
         </div>
         <div className="topbar-right">
+          <button type="button" className="welcome-help" aria-label="How it works" onClick={() => { setWelcomeStep(0); setWelcomeOpen(true); }}>
+            <span className="welcome-help-label">How it works</span><span className="welcome-help-icon" aria-hidden="true">?</span>
+          </button>
           <button
             type="button"
             className="theme-toggle"
@@ -1007,6 +1073,77 @@ export default function App() {
         </div>
       </footer>
     </div>
+    {welcomeOpen && (
+      <div className="welcome-backdrop">
+        <section className={`welcome-dialog welcome-art-step-${welcomeStep}`} role="dialog" aria-modal="true" aria-labelledby="welcome-title" ref={welcomeDialogRef}>
+          <div className="welcome-art-panel">
+            <div className="welcome-art-top">
+              <div className="welcome-art-brand"><span className="welcome-brand-mark"><i /><i /><i /></span> proxi<span>speak</span></div>
+              <button type="button" className="welcome-skip" onClick={dismissWelcome}>Skip intro <span aria-hidden="true">×</span></button>
+            </div>
+            <div className="welcome-illustration" aria-hidden="true">
+              <span className="welcome-spark spark-one">✦</span>
+              <span className="welcome-spark spark-two">✳</span>
+              <span className="welcome-plant">♧</span>
+              <div className="welcome-office">
+                <div className="welcome-room-window"><i /><i /><i /></div>
+                <div className="welcome-table table-one" />
+                <div className="welcome-table table-two" />
+                <div className="welcome-person person-one"><span>🙂</span><i /></div>
+                <div className="welcome-person person-two"><span>👩🏽‍💻</span><i /></div>
+                <div className="welcome-person person-three"><span>🧑🏻‍🎨</span><i /></div>
+                <div className="welcome-speech-bubble">Hey there! <span>👋</span></div>
+                <div className="welcome-ripple ripple-one" />
+                <div className="welcome-ripple ripple-two" />
+              </div>
+              <div className="welcome-art-note"><span>●</span> A little closer, a lot more connected</div>
+            </div>
+            <div className="welcome-art-footer"><span>YOUR VIRTUAL OFFICE</span><span>✦ &nbsp; A space to work together</span></div>
+          </div>
+          <div className="welcome-content">
+            <div className="welcome-content-top">
+              <span className="welcome-kicker"><i /> A MORE HUMAN WAY TO WORK</span>
+              <div className="welcome-step-count">{String(welcomeStep + 1).padStart(2, '0')} <span>/ 03</span></div>
+            </div>
+            <div className="welcome-copy">
+              <h2 id="welcome-title">Welcome to a more <span>connected</span> office.</h2>
+              <p className="welcome-intro">ProxiSpeak brings your team together in a shared virtual workspace. Here’s the quick tour.</p>
+            </div>
+            <div className="welcome-step-list" aria-label="Getting started guide">
+              {WELCOME_STEPS.map((step, index) => (
+                <button
+                  type="button"
+                  className={`welcome-step${welcomeStep === index ? ' is-active' : ''}${welcomeStep > index ? ' is-complete' : ''}`}
+                  key={step.title}
+                  aria-current={welcomeStep === index ? 'step' : undefined}
+                  onClick={() => setWelcomeStep(index)}
+                >
+                  <span className="welcome-step-icon" aria-hidden="true">{welcomeStep > index ? '✓' : step.icon}</span>
+                  <span className="welcome-step-text"><b>{step.title}</b><small>{welcomeStep === index ? step.description : step.label}</small></span>
+                  <span className="welcome-step-chevron" aria-hidden="true">{welcomeStep === index ? '−' : '+'}</span>
+                </button>
+              ))}
+            </div>
+            <div className="welcome-bottom">
+              <div className="welcome-progress" aria-label={`Step ${welcomeStep + 1} of ${WELCOME_STEPS.length}`}>
+                {WELCOME_STEPS.map((step, index) => <span className={index <= welcomeStep ? 'is-filled' : ''} key={step.title} />)}
+              </div>
+              <div className="welcome-actions">
+                {welcomeStep > 0 && <button type="button" className="welcome-back" onClick={() => setWelcomeStep((step) => step - 1)}>Back</button>}
+                <button
+                  type="button"
+                  className="welcome-next"
+                  onClick={() => welcomeStep < WELCOME_STEPS.length - 1 ? setWelcomeStep((step) => step + 1) : dismissWelcome()}
+                >
+                  {welcomeStep < WELCOME_STEPS.length - 1 ? 'Next' : 'Let’s get started'} <span aria-hidden="true">{welcomeStep < WELCOME_STEPS.length - 1 ? '→' : '✦'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    )}
+    </>
   );
 }
 
