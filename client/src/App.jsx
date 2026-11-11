@@ -7,6 +7,7 @@ import { PeerManager } from './rtc/PeerManager.js';
 import { SPAWN } from '../../shared/defaultLayout.js';
 import { WORLD, HEAR_RADIUS, HEAR_HYSTERESIS, HEAR_RADIUS_MIN, HEAR_RADIUS_MAX, HEAR_RADIUS_STEP, dist } from '../../shared/geo.js';
 import { AVATAR_CHOICES, AVATAR_IDS, DEFAULT_AVATAR_ID, avatarById } from '../../shared/avatars.js';
+import { filterChatEvents } from './chatSearch.js';
 
 const ROOM_ID = 'main-office';
 const MAX_CHAT_MESSAGE_LENGTH = 500;
@@ -158,6 +159,7 @@ export default function App() {
   const [volume, setVolume] = useState(80);
   const [roster, setRoster] = useState([]);
   const [chatEvents, setChatEvents] = useState([]);
+  const [chatSearch, setChatSearch] = useState('');
   const [chatDraft, setChatDraft] = useState('');
   const [chatError, setChatError] = useState('');
   const [chatSending, setChatSending] = useState(false);
@@ -178,6 +180,7 @@ export default function App() {
   const [needsAdminToken, setNeedsAdminToken] = useState(false);
   const [adminToken, setAdminToken] = useState('');
   const [theme, setTheme] = useState(() => (localStorage.getItem(THEME_PREFERENCE_KEY) === 'dark' ? 'dark' : 'light'));
+  const filteredChatEvents = useMemo(() => filterChatEvents(chatEvents, chatSearch), [chatEvents, chatSearch]);
   hearRadiusRef.current = hearRadius;
 
   const dismissWelcome = useCallback(() => {
@@ -551,6 +554,7 @@ export default function App() {
     setNetwork('offline');
     setRoster([]);
     setChatEvents([]);
+    setChatSearch('');
     setChatDraft('');
     setNearby(0);
     setName('');
@@ -949,8 +953,28 @@ export default function App() {
               <div><span className="eyebrow">ASYNC CONVERSATION</span><h3>Team chat</h3></div>
               <span className="chat-presence">{joined ? 'Room-wide' : 'Join to chat'}</span>
             </div>
+            <div className="chat-search-row">
+              <input
+                type="search"
+                className="chat-search"
+                aria-label="Search team chat"
+                placeholder="Search messages or people"
+                value={chatSearch}
+                onChange={(event) => setChatSearch(event.target.value)}
+              />
+              {chatSearch && (
+                <button type="button" className="chat-search-clear" onClick={() => setChatSearch('')}>
+                  Clear
+                </button>
+              )}
+              {chatSearch.trim() && (
+                <span className="chat-search-count" role="status">
+                  {filteredChatEvents.length} of {chatEvents.length} {chatEvents.length === 1 ? 'match' : 'matches'}
+                </span>
+              )}
+            </div>
             <div className="chat-feed" role="log" aria-live="polite" aria-relevant="additions">
-              {chatEvents.length === 0 ? <p className="chat-empty">{joined ? 'No messages yet. Send a message or quick reaction to start the conversation.' : 'Join the office to see new messages and reactions.'}</p> : chatEvents.map((event) => {
+              {chatEvents.length === 0 ? <p className="chat-empty">{joined ? 'No messages yet. Send a message or quick reaction to start the conversation.' : 'Join the office to see new messages and reactions.'}</p> : filteredChatEvents.length === 0 ? <p className="chat-empty">No messages or reactions match “{chatSearch.trim()}”.</p> : filteredChatEvents.map((event) => {
                 const sentAt = Number.isFinite(event.createdAt) ? new Date(event.createdAt) : null;
                 return (
                   <div className={`chat-event${event.type === 'reaction' ? ' reaction-event' : ''}`} key={event.id}>
